@@ -225,13 +225,38 @@ def _norm_id(s: Optional[str]) -> str:
     return "".join(s.split()).replace("-", "").upper()
 
 
-def check_payment_details(a: Approval, c: Contract) -> CheckResult:
-    """检查 11：具体收款标识（PayPal 邮箱 / IBAN / SWIFT / 账号）是否与合同一致。
+# 收款账户所在国家：审批多为中文、合同多为英文/本地文，做个对照
+_COUNTRY = {
+    "土耳其": "turkey", "turkey": "turkey", "türkiye": "turkey", "turkiye": "turkey",
+    "台湾": "taiwan", "台灣": "taiwan", "taiwan": "taiwan",
+    "韩国": "korea", "korea": "korea",
+    "日本": "japan", "japan": "japan",
+    "巴西": "brazil", "brazil": "brazil",
+    "秘鲁": "peru", "peru": "peru",
+    "埃及": "egypt", "egypt": "egypt",
+}
+
+
+def _norm_country(s: Optional[str]) -> str:
+    n = _norm(s)
+    return _COUNTRY.get(n, n)
+
+
+def _norm_addr(s: Optional[str]) -> str:
+    """地址归一化：去掉空格和常见标点，转小写，减少写法差异导致的假性不一致。"""
+    n = _norm(s)
+    for ch in " ,.，。、/-":
+        n = n.replace(ch, "")
+    return n
+
+
+def check_payment_account(a: Approval, c: Contract) -> CheckResult:
+    """检查 11：收款账号（PayPal 邮箱 / IBAN / SWIFT / 银行账号）是否与合同一致。
 
     只比「账号本身」——名字对、账号被改成别人的，是最危险的错。
     两边都提供的标识才比对；任一不一致 → 打回；都没法比 → 人工确认。
     """
-    name = "11. 收款信息核对"
+    name = "11. 收款账号核对"
     bad, ok = [], []
 
     # PayPal/Payoneer 邮箱（大小写不敏感）
@@ -260,8 +285,44 @@ def check_payment_details(a: Approval, c: Contract) -> CheckResult:
     if ok:
         return CheckResult(name, Status.PASS, "收款信息一致（" + "、".join(ok) + "）")
     return CheckResult(
-        name, Status.FLAG, "合同/审批未提供可比对的收款标识（邮箱/IBAN 等），请人工确认"
+        name, Status.FLAG, "合同/审批未提供可比对的收款账号（邮箱/IBAN 等），请人工确认"
     )
+
+
+def check_payment_supporting(a: Approval, c: Contract) -> CheckResult:
+    """检查 12：收款辅助信息（国家 / 地址 / 邮编）是否与合同一致。
+
+    辅助信息写法常有差异、且不直接决定钱流向，所以不一致只标人工确认，不硬打回。
+    """
+    name = "12. 收款辅助信息"
+    bad, ok = [], []
+
+    ac, cc = _norm_country(a.recipient_country), _norm_country(c.recipient_country)
+    if ac and cc:
+        (ok if ac == cc else bad).append(
+            f"国家「{a.recipient_country}」" if ac == cc
+            else f"国家不一致：审批「{a.recipient_country}」vs 合同「{c.recipient_country}」"
+        )
+
+    aa, ca = _norm_addr(a.recipient_address), _norm_addr(c.recipient_address)
+    if aa and ca:
+        (ok if aa == ca else bad).append(
+            "地址一致" if aa == ca
+            else f"地址不一致：审批「{a.recipient_address}」vs 合同「{c.recipient_address}」"
+        )
+
+    ap, cp = _norm_id(a.postal_code), _norm_id(c.postal_code)
+    if ap and cp:
+        (ok if ap == cp else bad).append(
+            f"邮编「{a.postal_code}」" if ap == cp
+            else f"邮编不一致：审批「{a.postal_code}」vs 合同「{c.postal_code}」"
+        )
+
+    if bad:
+        return CheckResult(name, Status.FLAG, "；".join(bad) + "，请人工确认")
+    if ok:
+        return CheckResult(name, Status.PASS, "收款辅助信息一致（" + "、".join(ok) + "）")
+    return CheckResult(name, Status.PASS, "无辅助信息可比")
 
 
 def check_video_duplicates(a: Approval) -> CheckResult:
@@ -291,7 +352,6 @@ def audit(a: Approval, c: Contract) -> AuditResult:
         check_ocean_look_paypal(a, c),
         check_account_name(a, c),
         check_currency(a, c),
-        check_payment_details(a, c),
     ]
 
     # 检查 6/7/8 是视频数量这条算术链。预付款时金额是部分付款，
@@ -310,7 +370,11 @@ def audit(a: Approval, c: Contract) -> AuditResult:
         checks.append(check_video_list(a))
         checks.append(check_video_duplicates(a))
 
-    # 检查 9/10：单独标记，不影响 PASS/FAIL
+    # 收款信息核对（账号 + 辅助）始终跑，预付款也照样核
+    checks.append(check_payment_account(a, c))
+    checks.append(check_payment_supporting(a, c))
+
+    # 单独标记：预付款 / 非 KOL，不影响 PASS/FAIL
     flags: List[CheckResult] = []
     if a.is_prepayment:
         flags.append(CheckResult("9. 预付款", Status.FLAG, "本单为预付款流程，请单独走预付款审核"))

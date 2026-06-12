@@ -48,6 +48,9 @@ class Approval(BaseModel):
     iban: Optional[str] = Field(default=None, description="国际银行账号 IBAN")
     swift: Optional[str] = Field(default=None, description="银行 SWIFT/BIC 码")
     bank_account: Optional[str] = Field(default=None, description="银行账号（非 IBAN）")
+    recipient_country: Optional[str] = Field(default=None, description="收款账户所在国家")
+    recipient_address: Optional[str] = Field(default=None, description="收款方地址")
+    postal_code: Optional[str] = Field(default=None, description="收款方邮编")
 
 
 class Contract(BaseModel):
@@ -76,3 +79,6 @@ class Contract(BaseModel):
     iban: Optional[str] = Field(default=None, description="合同里的 IBAN")
     swift: Optional[str] = Field(default=None, description="合同里的 SWIFT/BIC 码")
     bank_account: Optional[str] = Field(default=None, description="合同里的银行账号（非 IBAN）")
+    recipient_country: Optional[str] = Field(default=None, description="合同里的收款账户所在国家")
+    recipient_address: Optional[str] = Field(default=None, description="合同里的收款方地址")
+    postal_code: Optional[str] = Field(default=None, description="合同里的收款方邮编")
