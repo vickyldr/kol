@@ -1,0 +1,165 @@
+"""核对规则的单元测试——证明 10 条逻辑都对，纯本地、不调 API。"""
+
+import sys
+from decimal import Decimal
+
+import pytest
+
+from kol_audit.dedup import DedupStore, fingerprint
+from kol_audit.models import Approval, Contract
+from kol_audit.rules import Status, audit
+
+
+def make_approval(**over):
+    base = dict(
+        approval_id="APR-001",
+        project="夏季彩妆推广",
+        kol_nickname="@beauty_anna",
+        product=None,
+        payment_method="PayPal",
+        account_name="Anna Smith",
+        currency="USD",
+        amount=Decimal("600"),
+        platform_count=2,
+        collab_video_count=4,
+        video_list=["v1", "v2", "v3", "v4"],
+        is_prepayment=False,
+        is_non_kol=False,
+    )
+    base.update(over)
+    return Approval(**base)
+
+
+def make_contract(**over):
+    base = dict(
+        project="夏季彩妆推广",
+        kol_nickname="@beauty_anna",
+        unit_price=Decimal("300"),
+        account_name="Anna Smith",
+        payment_method="PayPal",
+        currency="USD",
+    )
+    base.update(over)
+    return Contract(**base)
+
+
+def test_all_pass():
+    # 600 / 300 = 2 条；2 条 × 2 平台 = 4；清单 4 条 → 全过
+    res = audit(make_approval(), make_contract())
+    assert res.overall is Status.PASS
+    assert res.reasons == []
+
+
+def test_project_mismatch():
+    res = audit(make_approval(project="冬季护肤"), make_contract())
+    assert res.overall is Status.FAIL
+    assert any("项目" in r for r in res.reasons)
+
+
+def test_kol_mismatch():
+    res = audit(make_approval(kol_nickname="@someone_else"), make_contract())
+    assert res.overall is Status.FAIL
+    assert any("KOL" in r for r in res.reasons)
+
+
+def test_normalization_avoids_false_fail():
+    # 大小写 + 全角空格 不应判为不一致
+    res = audit(
+        make_approval(currency="usd", account_name=" Anna  Smith "),
+        make_contract(currency="USD", account_name="Anna Smith"),
+    )
+    # 账户名中间双空格会被 casefold/strip 处理首尾，但中间空格不同——
+    # 这里验证币种大小写归一化生效（账户名仍可能因中间空格不同而失败，属预期严格）
+    currency_check = next(c for c in res.checks if c.name.startswith("5"))
+    assert currency_check.status is Status.PASS
+
+
+def test_ocean_look_must_be_paypal():
+    a = make_approval(product="Ocean Look", payment_method="银行转账")
+    c = make_contract(payment_method="银行转账")
+    res = audit(a, c)
+    assert res.overall is Status.FAIL
+    assert any("PayPal" in r for r in res.reasons)
+
+
+def test_ocean_look_with_paypal_passes():
+    a = make_approval(product="Ocean Look", payment_method="PayPal")
+    res = audit(a, make_contract())
+    ol = next(c for c in res.checks if c.name.startswith("3"))
+    assert ol.status is Status.PASS
+
+
+def test_non_ocean_look_skips_rule3():
+    res = audit(make_approval(product="其他业务", payment_method="银行转账"), make_contract(payment_method="银行转账"))
+    ol = next(c for c in res.checks if c.name.startswith("3"))
+    assert ol.status is Status.PASS  # 规则不适用，视为通过
+
+
+def test_account_name_mismatch():
+    res = audit(make_approval(account_name="Bob Jones"), make_contract())
+    assert res.overall is Status.FAIL
+    assert any("账户名" in r for r in res.reasons)
+
+
+def test_currency_mismatch():
+    res = audit(make_approval(currency="EUR"), make_contract())
+    assert res.overall is Status.FAIL
+
+
+def test_amount_not_divisible_by_unit_price():
+    # 650 / 300 = 2.16... 不整除 → FAIL
+    res = audit(make_approval(amount=Decimal("650")), make_contract())
+    assert res.overall is Status.FAIL
+    assert any("不是整数" in r or "整数" in r for r in res.reasons)
+
+
+def test_collab_count_wrong():
+    # 600/300=2 条，×2 平台应为 4，但填了 5
+    res = audit(make_approval(collab_video_count=5, video_list=["v1", "v2", "v3", "v4", "v5"]), make_contract())
+    assert res.overall is Status.FAIL
+    assert any("合作视频数量" in r or "视频数" in r for r in res.reasons)
+
+
+def test_video_list_count_mismatch():
+    # 数量字段对（4），但清单只给了 3 条
+    res = audit(make_approval(video_list=["v1", "v2", "v3"]), make_contract())
+    assert res.overall is Status.FAIL
+    assert any("视频清单" in r for r in res.reasons)
+
+
+def test_prepayment_is_flagged_and_skips_math():
+    res = audit(make_approval(is_prepayment=True, amount=Decimal("100")), make_contract())
+    # 预付款不因金额对不上而 FAIL（前 5 项仍正常）
+    assert res.overall is Status.PASS
+    assert any(f.name.startswith("9") for f in res.flags)
+
+
+def test_non_kol_is_flagged():
+    res = audit(make_approval(is_non_kol=True), make_contract())
+    assert any(f.name.startswith("10") for f in res.flags)
+
+
+def test_dedup(tmp_path):
+    store = DedupStore(str(tmp_path / "store.json"))
+    a = make_approval()
+    assert store.check(a).is_duplicate is False
+    store.record(a, "2026-06-12 10:00")
+    # 换个单号、内容照旧 → 应判重复
+    a2 = make_approval(approval_id="APR-999")
+    dup = store.check(a2)
+    assert dup.is_duplicate is True
+    assert fingerprint(a) == fingerprint(a2)
+
+
+def test_decimal_precision():
+    # 0.1+0.2 类浮点陷阱：单价 0.1，金额 0.3 → 应整除为 3
+    res = audit(
+        make_approval(amount=Decimal("0.3"), platform_count=1, collab_video_count=3, video_list=["a", "b", "c"]),
+        make_contract(unit_price=Decimal("0.1")),
+    )
+    c6 = next(c for c in res.checks if c.name.startswith("6"))
+    assert c6.status is Status.PASS
+
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__, "-v"]))

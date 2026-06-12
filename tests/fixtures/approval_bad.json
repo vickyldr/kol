@@ -1,0 +1,18 @@
+{
+  "approval_id": "APR-2026-0613",
+  "project": "夏季彩妆推广",
+  "kol_nickname": "@beauty_anna",
+  "product": "Ocean Look",
+  "payment_method": "银行转账",
+  "account_name": "Bob Jones",
+  "currency": "USD",
+  "amount": "650",
+  "platform_count": 2,
+  "collab_video_count": 5,
+  "video_list": [
+    "https://tiktok.com/v1",
+    "https://tiktok.com/v2"
+  ],
+  "is_prepayment": false,
+  "is_non_kol": false
+}

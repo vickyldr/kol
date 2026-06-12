@@ -1,0 +1,20 @@
+{
+  "approval_id": "APR-2026-0612",
+  "project": "夏季彩妆推广",
+  "kol_nickname": "@beauty_anna",
+  "product": "Ocean Look",
+  "payment_method": "PayPal",
+  "account_name": "Anna Smith",
+  "currency": "USD",
+  "amount": "600",
+  "platform_count": 2,
+  "collab_video_count": 4,
+  "video_list": [
+    "https://tiktok.com/v1",
+    "https://tiktok.com/v2",
+    "https://instagram.com/v1",
+    "https://instagram.com/v2"
+  ],
+  "is_prepayment": false,
+  "is_non_kol": false
+}
