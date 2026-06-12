@@ -41,6 +41,14 @@ class Approval(BaseModel):
     is_prepayment: bool = Field(default=False, description="是否为预付款流程")
     is_non_kol: bool = Field(default=False, description="是否为非 KOL 上线")
 
+    # 具体收款标识（账号本身，不只是名字），用于「收款信息核对」
+    payment_email: Optional[str] = Field(
+        default=None, description="PayPal/Payoneer 收款邮箱"
+    )
+    iban: Optional[str] = Field(default=None, description="国际银行账号 IBAN")
+    swift: Optional[str] = Field(default=None, description="银行 SWIFT/BIC 码")
+    bank_account: Optional[str] = Field(default=None, description="银行账号（非 IBAN）")
+
 
 class Contract(BaseModel):
     """审批里附的合同 PDF 中提取出来的关键字段。"""
@@ -60,3 +68,11 @@ class Contract(BaseModel):
         default=None, description="合同约定的收款方式，例如 PayPal"
     )
     currency: str = Field(description="合同币种")
+
+    # 合同收款信息里的具体收款标识，用于「收款信息核对」
+    payment_email: Optional[str] = Field(
+        default=None, description="合同里的 PayPal/Payoneer 收款邮箱"
+    )
+    iban: Optional[str] = Field(default=None, description="合同里的 IBAN")
+    swift: Optional[str] = Field(default=None, description="合同里的 SWIFT/BIC 码")
+    bank_account: Optional[str] = Field(default=None, description="合同里的银行账号（非 IBAN）")

@@ -134,6 +134,50 @@ def test_duplicate_video_links_fail():
     assert any("重复链接" in r for r in res.reasons)
 
 
+def test_payment_email_match_passes():
+    res = audit(
+        make_approval(payment_email="rafa.grama.silva@gmail.com"),
+        make_contract(payment_email="RAFA.Grama.Silva@gmail.com"),  # 大小写不敏感
+    )
+    p = next(c for c in res.checks if c.name.startswith("11"))
+    assert p.status is Status.PASS
+
+
+def test_payment_email_mismatch_fails():
+    res = audit(
+        make_approval(payment_email="rafa.grama.silva@gmail.com"),
+        make_contract(payment_email="someone.else@gmail.com"),
+    )
+    assert res.overall is Status.FAIL
+    assert any("收款邮箱不一致" in r for r in res.reasons)
+
+
+def test_iban_mismatch_fails():
+    # 空格/横线无关，纯数字不同才算不一致
+    res = audit(
+        make_approval(iban="TR23 0001 0090 1093 4138 2050 01"),
+        make_contract(iban="TR99-0001-0090-1093-4138-2050-01"),
+    )
+    assert res.overall is Status.FAIL
+    assert any("IBAN不一致" in r for r in res.reasons)
+
+
+def test_iban_match_ignores_spaces():
+    res = audit(
+        make_approval(iban="TR23 0001 0090 1093 4138 2050 01"),
+        make_contract(iban="TR2300010090109341382050 01"),
+    )
+    p = next(c for c in res.checks if c.name.startswith("11"))
+    assert p.status is Status.PASS
+
+
+def test_payment_details_missing_is_flagged():
+    res = audit(make_approval(), make_contract())  # 两边都没填收款标识
+    p = next(c for c in res.checks if c.name.startswith("11"))
+    assert p.status is Status.FLAG
+    assert res.overall is Status.PASS  # 仅人工确认，不算失败
+
+
 def test_account_name_mismatch():
     res = audit(make_approval(account_name="Bob Jones"), make_contract())
     assert res.overall is Status.FAIL

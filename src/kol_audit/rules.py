@@ -218,6 +218,52 @@ def check_video_list(a: Approval) -> CheckResult:
     )
 
 
+def _norm_id(s: Optional[str]) -> str:
+    """归一化收款标识：去空格/横线、转大写（IBAN/SWIFT/账号比对用）。"""
+    if not s:
+        return ""
+    return "".join(s.split()).replace("-", "").upper()
+
+
+def check_payment_details(a: Approval, c: Contract) -> CheckResult:
+    """检查 11：具体收款标识（PayPal 邮箱 / IBAN / SWIFT / 账号）是否与合同一致。
+
+    只比「账号本身」——名字对、账号被改成别人的，是最危险的错。
+    两边都提供的标识才比对；任一不一致 → 打回；都没法比 → 人工确认。
+    """
+    name = "11. 收款信息核对"
+    bad, ok = [], []
+
+    # PayPal/Payoneer 邮箱（大小写不敏感）
+    ae, ce = _norm(a.payment_email), _norm(c.payment_email)
+    if ae and ce:
+        (ok if ae == ce else bad).append(
+            f"收款邮箱「{a.payment_email}」" if ae == ce
+            else f"收款邮箱不一致：审批「{a.payment_email}」≠ 合同「{c.payment_email}」"
+        )
+
+    # IBAN / SWIFT / 银行账号（去空格横线后比对）
+    for label, av, cv in (
+        ("IBAN", a.iban, c.iban),
+        ("SWIFT", a.swift, c.swift),
+        ("银行账号", a.bank_account, c.bank_account),
+    ):
+        na, nc = _norm_id(av), _norm_id(cv)
+        if na and nc:
+            (ok if na == nc else bad).append(
+                f"{label}「{av}」" if na == nc
+                else f"{label}不一致：审批「{av}」≠ 合同「{cv}」"
+            )
+
+    if bad:
+        return CheckResult(name, Status.FAIL, "；".join(bad))
+    if ok:
+        return CheckResult(name, Status.PASS, "收款信息一致（" + "、".join(ok) + "）")
+    return CheckResult(
+        name, Status.FLAG, "合同/审批未提供可比对的收款标识（邮箱/IBAN 等），请人工确认"
+    )
+
+
 def check_video_duplicates(a: Approval) -> CheckResult:
     """检查 8b：视频清单里的链接不能重复（同一链接贴两遍多半是漏填/错填）。"""
     name = "8b. 视频清单无重复链接"
@@ -245,6 +291,7 @@ def audit(a: Approval, c: Contract) -> AuditResult:
         check_ocean_look_paypal(a, c),
         check_account_name(a, c),
         check_currency(a, c),
+        check_payment_details(a, c),
     ]
 
     # 检查 6/7/8 是视频数量这条算术链。预付款时金额是部分付款，
