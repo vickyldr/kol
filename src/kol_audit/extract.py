@@ -39,7 +39,10 @@ _APPROVAL_PROMPT = """这是一张飞书付款审批单的截图/内容。请提
 - platform_count: 平台数
 - collab_video_count: 填写的合作视频数量
 - video_list: 视频清单（每条视频链接/标识放进数组）
-- is_prepayment: 是否预付款流程（true/false）
+- is_prepayment: 是否预付款/分期/尾款（true/false）。判断依据有两处，任一命中即 true：
+    (1) 审批流程字段是「预付款流程」；
+    (2) 备注里出现「预付款 / 已预支付 / 分期 / 尾款 / 支付剩余」等字样
+        （有的单审批流程写"现付款"，但备注才点明是预付尾款，必须按备注判）
 - is_non_kol: 是否非 KOL 上线（true/false）"""
 
 
