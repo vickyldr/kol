@@ -110,6 +110,30 @@ def test_non_ocean_look_skips_rule3():
     assert ol.status is Status.PASS  # 规则不适用，视为通过
 
 
+def test_kol_typo_is_flagged_not_failed():
+    # 差一个字母（合同打字错）→ 转人工，不直接打回
+    res = audit(make_approval(kol_nickname="thisishikmatt"), make_contract(kol_nickname="thisisthikmatt"))
+    k = next(c for c in res.checks if c.name.startswith("2"))
+    assert k.status is Status.FLAG
+    # 仅此一项时不算整体失败
+    assert res.overall is Status.PASS
+
+
+def test_kol_totally_different_still_fails():
+    res = audit(make_approval(kol_nickname="@anna"), make_contract(kol_nickname="@bobxyz"))
+    assert res.overall is Status.FAIL
+
+
+def test_duplicate_video_links_fail():
+    res = audit(
+        make_approval(collab_video_count=2, platform_count=1, amount=Decimal("600"),
+                      video_list=["https://x.com/同一个", "https://x.com/同一个"]),
+        make_contract(unit_price=Decimal("300")),
+    )
+    assert res.overall is Status.FAIL
+    assert any("重复链接" in r for r in res.reasons)
+
+
 def test_account_name_mismatch():
     res = audit(make_approval(account_name="Bob Jones"), make_contract())
     assert res.overall is Status.FAIL

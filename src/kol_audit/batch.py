@@ -117,9 +117,10 @@ def render_batch(items: List[BatchItem]) -> str:
                 reasons.extend(it.result.reasons)
             for r in reasons:
                 lines.append(f"     ↳ {r}")
-        # 人工标记（预付款 / 非 KOL / 项目待确认）也提示出来
+        # 人工标记（预付款 / 非 KOL / 项目待确认 / KOL 差一点）也提示出来
         if it.result:
-            for fl in it.result.flags:
+            check_flags = [c for c in it.result.checks if c.status is Status.FLAG]
+            for fl in check_flags + it.result.flags:
                 lines.append(f"     ⚠️ {fl.name}：{fl.detail}")
 
     lines.append("=" * 50)

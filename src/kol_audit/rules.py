@@ -64,6 +64,19 @@ def _norm(s: Optional[str]) -> str:
     return s.strip().casefold()
 
 
+def _edit_distance(a: str, b: str) -> int:
+    """两个字符串的编辑距离（增删改各算 1 步），用于判断 KOL 昵称是否只差一点。"""
+    m, n = len(a), len(b)
+    prev = list(range(n + 1))
+    for i in range(1, m + 1):
+        cur = [i] + [0] * n
+        for j in range(1, n + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+        prev = cur
+    return prev[n]
+
+
 def _near_integer(value: Decimal, tol: Decimal = Decimal("0.01")) -> Optional[int]:
     """若 value 足够接近某个整数则返回该整数，否则返回 None。
 
@@ -95,8 +108,16 @@ def check_project(a: Approval, c: Contract) -> CheckResult:
 
 def check_kol(a: Approval, c: Contract) -> CheckResult:
     name = "2. KOL 昵称一致"
-    if _norm(a.kol_nickname) == _norm(c.kol_nickname):
+    na, nc = _norm(a.kol_nickname), _norm(c.kol_nickname)
+    if na == nc:
         return CheckResult(name, Status.PASS, f"KOL「{a.kol_nickname}」与合同一致")
+    # 差一两个字母多半是合同/审批打字错，转人工看一眼，而不是直接打回
+    if _edit_distance(na, nc) <= 2:
+        return CheckResult(
+            name,
+            Status.FLAG,
+            f"KOL 昵称差一点：审批「{a.kol_nickname}」vs 合同「{c.kol_nickname}」，疑似打字错，请人工确认",
+        )
     return CheckResult(
         name,
         Status.FAIL,
@@ -197,6 +218,22 @@ def check_video_list(a: Approval) -> CheckResult:
     )
 
 
+def check_video_duplicates(a: Approval) -> CheckResult:
+    """检查 8b：视频清单里的链接不能重复（同一链接贴两遍多半是漏填/错填）。"""
+    name = "8b. 视频清单无重复链接"
+    seen, dups = set(), []
+    for v in a.video_list:
+        key = _norm(v)
+        if key and key in seen:
+            dups.append(v)
+        seen.add(key)
+    if dups:
+        return CheckResult(
+            name, Status.FAIL, f"视频清单里有重复链接（贴了两遍）：{dups[0]}"
+        )
+    return CheckResult(name, Status.PASS, "视频清单无重复链接")
+
+
 # ---- 总入口 ---------------------------------------------------------------
 
 
@@ -224,6 +261,7 @@ def audit(a: Approval, c: Contract) -> AuditResult:
             actual_videos = int(Decimal(a.amount) / Decimal(c.unit_price))
         checks.append(check_collab_count(a, actual_videos))
         checks.append(check_video_list(a))
+        checks.append(check_video_duplicates(a))
 
     # 检查 9/10：单独标记，不影响 PASS/FAIL
     flags: List[CheckResult] = []
