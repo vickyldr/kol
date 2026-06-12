@@ -18,7 +18,8 @@ from .models import Approval, Contract
 MODEL = "claude-opus-4-8"
 
 _CONTRACT_PROMPT = """这是一份 KOL 合作合同。请从中提取以下字段，原样照抄合同里的内容，不要改写、不要计算：
-- project: 项目名称
+- project: 合同 WHEREAS 条款里写的「要推广的 App 名」（如 VivaVideo），
+           用于和审批的项目名做完全一致比对；注意不是甲方公司名（如 Quvideo）
 - kol_nickname: KOL 昵称（红人名/账号名）
 - unit_price: 单价（每条视频的价格，只要数字）
 - account_name: 收款信息里的账户名称/收款人姓名

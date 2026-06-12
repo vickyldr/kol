@@ -46,7 +46,12 @@ class Contract(BaseModel):
     """审批里附的合同 PDF 中提取出来的关键字段。"""
 
     project: Optional[str] = Field(
-        default=None, description="合同中的项目名称；很多合同正文不写项目名，留空即可"
+        default=None,
+        description=(
+            "合同 WHEREAS 条款里要推广的 App 名（如 VivaVideo），"
+            "用于和审批项目名做完全一致比对；不是甲方公司名。"
+            "若合同确实没写则留空（核对时转人工确认）。"
+        ),
     )
     kol_nickname: str = Field(description="合同中的 KOL 昵称")
     unit_price: Decimal = Field(description="合同单价（每条视频的价格）")

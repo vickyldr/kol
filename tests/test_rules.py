@@ -56,6 +56,21 @@ def test_project_mismatch():
     assert any("项目" in r for r in res.reasons)
 
 
+def test_project_vs_contract_app_name_must_match():
+    # 真实样例：审批项目 Rythmix，合同 WHEREAS 写的 App 名是 VivaVideo → 必须打回
+    res = audit(make_approval(project="Rythmix"), make_contract(project="VivaVideo"))
+    assert res.overall is Status.FAIL
+    assert any("Rythmix" in r and "VivaVideo" in r for r in res.reasons)
+
+
+def test_project_missing_in_contract_is_flagged():
+    # 合同确实没写 App 名 → 转人工确认，而非误判失败
+    res = audit(make_approval(project="Rythmix"), make_contract(project=None))
+    p = next(c for c in res.checks if c.name.startswith("1"))
+    assert p.status is Status.FLAG
+    assert res.overall is Status.PASS  # 仅人工确认，不算失败
+
+
 def test_kol_mismatch():
     res = audit(make_approval(kol_nickname="@someone_else"), make_contract())
     assert res.overall is Status.FAIL
