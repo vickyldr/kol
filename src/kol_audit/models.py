@@ -45,7 +45,9 @@ class Approval(BaseModel):
 class Contract(BaseModel):
     """审批里附的合同 PDF 中提取出来的关键字段。"""
 
-    project: str = Field(description="合同中的项目名称")
+    project: Optional[str] = Field(
+        default=None, description="合同中的项目名称；很多合同正文不写项目名，留空即可"
+    )
     kol_nickname: str = Field(description="合同中的 KOL 昵称")
     unit_price: Decimal = Field(description="合同单价（每条视频的价格）")
     account_name: str = Field(description="合同收款信息中的账户名称")

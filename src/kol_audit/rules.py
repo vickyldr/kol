@@ -80,6 +80,12 @@ def _near_integer(value: Decimal, tol: Decimal = Decimal("0.01")) -> Optional[in
 
 def check_project(a: Approval, c: Contract) -> CheckResult:
     name = "1. 项目一致"
+    # 很多合同正文不印项目名（例如只写要推广的 App 名），此时无法自动核对，
+    # 转人工确认，而不是误判为失败。
+    if not _norm(c.project):
+        return CheckResult(
+            name, Status.FLAG, f"合同里没写项目名，审批项目为「{a.project}」，请人工确认"
+        )
     if _norm(a.project) == _norm(c.project):
         return CheckResult(name, Status.PASS, f"项目「{a.project}」与合同一致")
     return CheckResult(
