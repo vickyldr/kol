@@ -118,6 +118,15 @@ def check_kol(a: Approval, c: Contract) -> CheckResult:
             Status.FLAG,
             f"KOL 昵称差一点：审批「{a.kol_nickname}」vs 合同「{c.kol_nickname}」，疑似打字错，请人工确认",
         )
+    # handle 差很多，但若收款账户名 + PayPal 邮箱都对得上，多半是同一人换了账号 → 转人工
+    same_name = _norm(a.account_name) and _norm(a.account_name) == _norm(c.account_name)
+    same_email = _norm(a.payment_email) and _norm(a.payment_email) == _norm(c.payment_email)
+    if same_name and same_email:
+        return CheckResult(
+            name,
+            Status.FLAG,
+            f"KOL handle 不同：审批「{a.kol_nickname}」vs 合同「{c.kol_nickname}」，但账户名和 PayPal 邮箱一致，疑似同一人换号，请人工确认",
+        )
     return CheckResult(
         name,
         Status.FAIL,

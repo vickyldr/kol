@@ -124,6 +124,19 @@ def test_kol_totally_different_still_fails():
     assert res.overall is Status.FAIL
 
 
+def test_kol_handle_differs_but_account_and_email_match_is_flagged():
+    # 真实样例 061：handle 差很多，但账户名+PayPal邮箱都一致 → 转人工，不打回
+    res = audit(
+        make_approval(kol_nickname="soyelpipelon09", account_name="Andrés Giraldo Aguirre",
+                      payment_email="Anfegi9703@gmail.com"),
+        make_contract(kol_nickname="elpipelon09", account_name="Andrés Giraldo Aguirre",
+                      payment_email="Anfegi9703@gmail.com"),
+    )
+    k = next(c for c in res.checks if c.name.startswith("2"))
+    assert k.status is Status.FLAG
+    assert res.overall is Status.PASS
+
+
 def test_duplicate_video_links_fail():
     res = audit(
         make_approval(collab_video_count=2, platform_count=1, amount=Decimal("600"),
