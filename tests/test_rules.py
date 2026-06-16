@@ -259,3 +259,26 @@ def test_decimal_precision():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_notes_platform_count_mismatch_flagged():
+    # 真实样例038：备注说3平台，清单实际4个 → 备注一致性标人工
+    res = audit(
+        make_approval(platform_count=4, collab_video_count=4,
+                      video_list=["a", "b", "c", "d"],
+                      notes_video_count=1, notes_platform_count=3, notes_total=Decimal("1200")),
+        make_contract(unit_price=Decimal("300")),
+    )
+    n = next(c for c in res.checks if c.name.startswith("13"))
+    assert n.status is Status.FLAG
+    assert "平台数" in n.detail
+
+
+def test_notes_total_mismatch_flagged():
+    res = audit(
+        make_approval(amount=Decimal("600"), notes_total=Decimal("999")),
+        make_contract(),
+    )
+    n = next(c for c in res.checks if c.name.startswith("13"))
+    assert n.status is Status.FLAG
+    assert "备注总额" in n.detail

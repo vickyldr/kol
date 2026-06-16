@@ -334,6 +334,35 @@ def check_payment_supporting(a: Approval, c: Contract) -> CheckResult:
     return CheckResult(name, Status.PASS, "无辅助信息可比")
 
 
+def check_notes_consistency(a: Approval, c: Contract) -> CheckResult:
+    """检查 13：备注里写的成交条款（总额/单价/视频数/平台数）和字段、合同对不对得上。
+
+    备注是发起人用大白话又写了一遍成交内容，等于独立佐证。对不上多半是哪边填错，
+    转人工确认（备注非结构化、口径可能略不同，不硬打回）。
+    """
+    name = "13. 备注一致性"
+    bad = []
+
+    if a.notes_total is not None and Decimal(a.notes_total) != Decimal(a.amount):
+        bad.append(f"备注总额 {a.notes_total} ≠ 审批金额 {a.amount}")
+    if a.notes_unit_price is not None and c.unit_price and Decimal(a.notes_unit_price) != Decimal(c.unit_price):
+        bad.append(f"备注单价 {a.notes_unit_price} ≠ 合同单价 {c.unit_price}")
+    if a.notes_platform_count is not None and a.notes_platform_count != a.platform_count:
+        bad.append(f"备注平台数 {a.notes_platform_count} ≠ 清单实际平台数 {a.platform_count}")
+    if a.notes_video_count is not None and a.notes_platform_count is not None:
+        expect = a.notes_video_count * a.notes_platform_count
+        if expect != a.collab_video_count:
+            bad.append(
+                f"备注 {a.notes_video_count} 视频 × {a.notes_platform_count} 平台 = {expect} ≠ 合作视频数量 {a.collab_video_count}"
+            )
+
+    if bad:
+        return CheckResult(name, Status.FLAG, "；".join(bad) + "，请人工确认")
+    if a.notes:
+        return CheckResult(name, Status.PASS, "备注与字段/合同一致")
+    return CheckResult(name, Status.PASS, "无备注可比")
+
+
 def check_video_duplicates(a: Approval) -> CheckResult:
     """检查 8b：视频清单里的链接不能重复（同一链接贴两遍多半是漏填/错填）。"""
     name = "8b. 视频清单无重复链接"
@@ -382,6 +411,8 @@ def audit(a: Approval, c: Contract) -> AuditResult:
     # 收款信息核对（账号 + 辅助）始终跑，预付款也照样核
     checks.append(check_payment_account(a, c))
     checks.append(check_payment_supporting(a, c))
+    # 备注一致性核对
+    checks.append(check_notes_consistency(a, c))
 
     # 单独标记：预付款 / 非 KOL，不影响 PASS/FAIL
     flags: List[CheckResult] = []

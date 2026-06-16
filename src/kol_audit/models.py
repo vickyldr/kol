@@ -52,6 +52,13 @@ class Approval(BaseModel):
     recipient_address: Optional[str] = Field(default=None, description="收款方地址")
     postal_code: Optional[str] = Field(default=None, description="收款方邮编")
 
+    # 备注栏原文 + 从备注里读出的成交数字，用于「备注一致性核对」
+    notes: Optional[str] = Field(default=None, description="备注栏原文")
+    notes_total: Optional[Decimal] = Field(default=None, description="备注里写的总额/合计金额")
+    notes_unit_price: Optional[Decimal] = Field(default=None, description="备注里写的视频单价")
+    notes_video_count: Optional[int] = Field(default=None, description="备注里写的视频条数")
+    notes_platform_count: Optional[int] = Field(default=None, description="备注里写的平台数")
+
 
 class Contract(BaseModel):
     """审批里附的合同 PDF 中提取出来的关键字段。"""

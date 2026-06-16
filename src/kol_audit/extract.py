@@ -57,7 +57,13 @@ _APPROVAL_PROMPT = """这是一张飞书付款审批单的截图/内容。请提
 - bank_account: 审批里的收款方银行账号（非 IBAN，没有就留空）
 - recipient_country: 审批里的收款账户所在国家（没有就留空）
 - recipient_address: 审批里的收款方地址（Address，没有就留空）
-- postal_code: 审批里的邮编（Postal code，没有就留空）"""
+- postal_code: 审批里的邮编（Postal code，没有就留空）
+- notes: 备注栏原文（完整照抄）
+- notes_total: 备注里写的总额/合计金额（只要数字，如 300、499；没有就留空）
+- notes_unit_price: 备注里写的视频单价（只要数字；没有就留空）
+- notes_video_count: 备注里写的视频条数（如"1视频""共2条视频"，取本次条数；没有就留空）
+- notes_platform_count: 备注里写的平台数（如"3平台""igtt双平台"=2、"igttyt"=3；没有就留空）
+  注意：备注里的"X万""1.5万"等若是播放量/预估播放量，不要当成金额。"""
 
 
 def _pdf_block(path: str | Path) -> dict:
