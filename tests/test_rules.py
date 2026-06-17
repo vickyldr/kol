@@ -192,7 +192,11 @@ def test_payment_details_missing_is_flagged():
 
 
 def test_account_name_mismatch():
-    res = audit(make_approval(account_name="Bob Jones"), make_contract())
+    # 银行收款：账户名不一致 → 打回（PayPal 不核姓名，故用银行方式测）
+    res = audit(
+        make_approval(payment_method="Bank transfer", account_name="Bob Jones", recipient_country="土耳其"),
+        make_contract(account_name="Anna Smith"),
+    )
     assert res.overall is Status.FAIL
     assert any("账户名" in r for r in res.reasons)
 
@@ -282,3 +286,45 @@ def test_notes_total_mismatch_flagged():
     n = next(c for c in res.checks if c.name.startswith("13"))
     assert n.status is Status.FLAG
     assert "备注总额" in n.detail
+
+
+def test_bank_name_turkish_chars_flagged():
+    # 土耳其银行收款人姓名含 ı/ç → 标人工
+    res = audit(
+        make_approval(payment_method="Bank transfer", account_name="Abdullah Alperen Kılınç",
+                      recipient_country="土耳其", iban="TR18 0004 6002"),
+        make_contract(account_name="Abdullah Alperen Kılınç", iban="TR18 0004 6002"),
+    )
+    s = next(c for c in res.checks if c.name.startswith("4b"))
+    assert s.status is Status.FLAG
+    assert "非英文字符" in s.detail
+
+
+def test_bank_name_taiwan_cjk_flagged():
+    res = audit(
+        make_approval(payment_method="Bank transfer", account_name="張海山", recipient_country="台湾"),
+        make_contract(account_name="張海山"),
+    )
+    s = next(c for c in res.checks if c.name.startswith("4b"))
+    assert s.status is Status.FLAG
+
+
+def test_bank_name_korea_japan_local_ok():
+    for ctry, nm in [("韩国", "정가을"), ("日本", "松村龍")]:
+        res = audit(
+            make_approval(payment_method="Bank transfer", account_name=nm, recipient_country=ctry),
+            make_contract(account_name=nm),
+        )
+        s = next(c for c in res.checks if c.name.startswith("4b"))
+        assert s.status is Status.PASS
+
+
+def test_paypal_name_not_checked():
+    # PayPal：姓名错误无所谓，账户名检查直接 PASS
+    res = audit(
+        make_approval(payment_method="PayPal", account_name="完全不同的名字",
+                      payment_email="a@b.com"),
+        make_contract(account_name="Someone Else", payment_email="a@b.com"),
+    )
+    acc = next(c for c in res.checks if c.name.startswith("4."))
+    assert acc.status is Status.PASS

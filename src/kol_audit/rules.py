@@ -155,8 +155,16 @@ def check_ocean_look_paypal(a: Approval, c: Contract) -> CheckResult:
     return CheckResult(name, Status.PASS, "Ocean Look 且收款方式为 PayPal")
 
 
+def _is_epay(method: Optional[str]) -> bool:
+    m = _norm(method)
+    return "paypal" in m or "payoneer" in m
+
+
 def check_account_name(a: Approval, c: Contract) -> CheckResult:
     name = "4. 账户名称一致"
+    # PayPal/Payoneer 以邮箱为准，姓名错误无所谓，不强制核对
+    if _is_epay(a.payment_method):
+        return CheckResult(name, Status.PASS, "PayPal/Payoneer 收款，姓名不强制核对（以邮箱为准）")
     if _norm(a.account_name) == _norm(c.account_name):
         return CheckResult(name, Status.PASS, f"账户名「{a.account_name}」与合同一致")
     return CheckResult(
@@ -164,6 +172,30 @@ def check_account_name(a: Approval, c: Contract) -> CheckResult:
         Status.FAIL,
         f"审批账户名「{a.account_name}」≠ 合同收款账户名「{c.account_name}」",
     )
+
+
+def check_bank_name_script(a: Approval, c: Contract) -> CheckResult:
+    """检查 4b：银行收款人姓名只能是英文字符。
+
+    银行跨境转账多要求收款人姓名为英文（罗马字母）。台湾繁体中文、土耳其语特殊字符
+    （ı ç ğ ş 等）会导致打款问题；韩语、日语放行（当地银行接受本地文字）。
+    PayPal/Payoneer 不适用（以邮箱为准）。
+    """
+    name = "4b. 收款人姓名(银行需英文)"
+    if _is_epay(a.payment_method):
+        return CheckResult(name, Status.PASS, "PayPal/Payoneer 收款，不适用")
+    country = _norm_country(a.recipient_country) or _norm_country(c.recipient_country)
+    if country in ("japan", "korea"):
+        return CheckResult(name, Status.PASS, f"{country} 银行，允许本地语言姓名")
+    nm = a.account_name or ""
+    nonascii = sorted({ch for ch in nm if ch.isalpha() and ord(ch) > 127})
+    if nonascii:
+        return CheckResult(
+            name,
+            Status.FLAG,
+            f"银行收款人姓名「{nm}」含非英文字符（{''.join(nonascii)}），应改用英文，请人工确认",
+        )
+    return CheckResult(name, Status.PASS, "收款人姓名为英文")
 
 
 def check_currency(a: Approval, c: Contract) -> CheckResult:
@@ -389,6 +421,7 @@ def audit(a: Approval, c: Contract) -> AuditResult:
         check_kol(a, c),
         check_ocean_look_paypal(a, c),
         check_account_name(a, c),
+        check_bank_name_script(a, c),
         check_currency(a, c),
     ]
 
