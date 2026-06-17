@@ -161,10 +161,8 @@ def _is_epay(method: Optional[str]) -> bool:
 
 
 def check_account_name(a: Approval, c: Contract) -> CheckResult:
+    # 账户名（含 PayPal/Payoneer）都要和合同一致——审批所有信息都得对得上合同
     name = "4. 账户名称一致"
-    # PayPal/Payoneer 以邮箱为准，姓名错误无所谓，不强制核对
-    if _is_epay(a.payment_method):
-        return CheckResult(name, Status.PASS, "PayPal/Payoneer 收款，姓名不强制核对（以邮箱为准）")
     if _norm(a.account_name) == _norm(c.account_name):
         return CheckResult(name, Status.PASS, f"账户名「{a.account_name}」与合同一致")
     return CheckResult(

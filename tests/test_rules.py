@@ -192,10 +192,17 @@ def test_payment_details_missing_is_flagged():
 
 
 def test_account_name_mismatch():
-    # 银行收款：账户名不一致 → 打回（PayPal 不核姓名，故用银行方式测）
+    # 账户名不一致 → 打回（PayPal/银行都核）
+    res = audit(make_approval(account_name="Bob Jones"), make_contract())
+    assert res.overall is Status.FAIL
+    assert any("账户名" in r for r in res.reasons)
+
+
+def test_paypal_account_name_mismatch_still_fails():
+    # PayPal 也要核姓名：审批名 ≠ 合同名 → 打回
     res = audit(
-        make_approval(payment_method="Bank transfer", account_name="Bob Jones", recipient_country="土耳其"),
-        make_contract(account_name="Anna Smith"),
+        make_approval(payment_method="PayPal", account_name="Wrong Name", payment_email="a@b.com"),
+        make_contract(account_name="Right Name", payment_email="a@b.com"),
     )
     assert res.overall is Status.FAIL
     assert any("账户名" in r for r in res.reasons)
@@ -319,12 +326,14 @@ def test_bank_name_korea_japan_local_ok():
         assert s.status is Status.PASS
 
 
-def test_paypal_name_not_checked():
-    # PayPal：姓名错误无所谓，账户名检查直接 PASS
+def test_paypal_special_chars_name_matches_contract_ok():
+    # PayPal 特殊字符名（如 Andrés），只要和合同一致即可；4b 不套用到 PayPal
     res = audit(
-        make_approval(payment_method="PayPal", account_name="完全不同的名字",
-                      payment_email="a@b.com"),
-        make_contract(account_name="Someone Else", payment_email="a@b.com"),
+        make_approval(payment_method="PayPal", account_name="Andrés Giraldo", payment_email="a@b.com",
+                      recipient_country="哥伦比亚"),
+        make_contract(account_name="Andrés Giraldo", payment_email="a@b.com"),
     )
     acc = next(c for c in res.checks if c.name.startswith("4."))
-    assert acc.status is Status.PASS
+    script = next(c for c in res.checks if c.name.startswith("4b"))
+    assert acc.status is Status.PASS          # 姓名与合同一致
+    assert script.status is Status.PASS       # PayPal 不套英文-only 规则
