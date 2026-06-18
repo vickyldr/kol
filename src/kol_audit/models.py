@@ -72,6 +72,13 @@ class Contract(BaseModel):
         ),
     )
     kol_nickname: str = Field(description="合同中的 KOL 昵称")
+    party_b_legal_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "合同「乙方（Party B）信息」里的 Legal Name / 法人名 / 名称（红人的真实姓名/法定名称）。"
+            "这一行必须填写；若合同里这一行确实空着则留空，核对时会标记出来。"
+        ),
+    )
     unit_price: Decimal = Field(description="合同单价（每条视频的价格）")
     account_name: str = Field(description="合同收款信息中的账户名称")
     payment_method: Optional[str] = Field(

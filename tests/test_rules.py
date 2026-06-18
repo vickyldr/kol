@@ -34,6 +34,7 @@ def make_contract(**over):
     base = dict(
         project="夏季彩妆推广",
         kol_nickname="@beauty_anna",
+        party_b_legal_name="Anna Smith",
         unit_price=Decimal("300"),
         account_name="Anna Smith",
         payment_method="PayPal",
@@ -75,6 +76,20 @@ def test_kol_mismatch():
     res = audit(make_approval(kol_nickname="@someone_else"), make_contract())
     assert res.overall is Status.FAIL
     assert any("KOL" in r for r in res.reasons)
+
+
+def test_contract_party_b_name_present_passes():
+    res = audit(make_approval(), make_contract(party_b_legal_name="Anna Smith"))
+    p = next(c for c in res.checks if c.name.startswith("2b"))
+    assert p.status is Status.PASS
+
+
+def test_contract_party_b_name_blank_is_flagged():
+    # 合同乙方 Legal Name 这一行空着 → 标记人工补全（不算硬失败）
+    res = audit(make_approval(), make_contract(party_b_legal_name=None))
+    p = next(c for c in res.checks if c.name.startswith("2b"))
+    assert p.status is Status.FLAG
+    assert res.overall is Status.PASS
 
 
 def test_normalization_avoids_false_fail():

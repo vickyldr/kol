@@ -7,6 +7,7 @@
 10 条检查 + 重复提交检测，对应用户给的清单：
   1. 项目是否与合同一致
   2. KOL 昵称是否与合同一致
+ 2b. 合同乙方（Party B）名称这一行必须填写
   3. Ocean Look 必须对应 PayPal
   4. 账户名称是否与合同收款信息一致
   5. 币种是否与合同一致
@@ -131,6 +132,22 @@ def check_kol(a: Approval, c: Contract) -> CheckResult:
         name,
         Status.FAIL,
         f"审批 KOL「{a.kol_nickname}」≠ 合同 KOL「{c.kol_nickname}」",
+    )
+
+
+def check_contract_party_b_name(c: Contract) -> CheckResult:
+    """检查 2b：合同「乙方（Party B）信息」里的 Legal Name / 名称这一行必须填写。
+
+    有的合同乙方信息只填了邮箱/账号，却漏填了红人的法定姓名（Legal Name），
+    属于合同不完整，必须补全后再付款。
+    """
+    name = "2b. 合同乙方名称已填写"
+    if _norm(c.party_b_legal_name):
+        return CheckResult(name, Status.PASS, f"合同乙方名称「{c.party_b_legal_name}」已填写")
+    return CheckResult(
+        name,
+        Status.FLAG,
+        "合同「乙方信息」里的 Legal Name（红人名称）这一行是空的，必须补全合同后再付款，请人工确认",
     )
 
 
@@ -417,6 +434,7 @@ def audit(a: Approval, c: Contract) -> AuditResult:
     checks: List[CheckResult] = [
         check_project(a, c),
         check_kol(a, c),
+        check_contract_party_b_name(c),
         check_ocean_look_paypal(a, c),
         check_account_name(a, c),
         check_bank_name_script(a, c),
