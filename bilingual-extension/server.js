@@ -2,9 +2,11 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const HOST = "127.0.0.1";
+const HOST = process.env.KOL_ASSISTANT_HOST || "127.0.0.1";
 const PORT = Number(process.env.KOL_ASSISTANT_PORT || 3210);
 const MODEL = process.env.DASHSCOPE_MODEL || "qwen-flash";
+// 团队口令：部署到 VPS 给团队用时设置，未设置则为本机单人模式（不校验）。
+const AUTH_TOKEN = process.env.KOL_ASSISTANT_TOKEN || "";
 const ROOT = __dirname;
 const KNOWLEDGE_PATH = path.join(ROOT, "data", "knowledge-base.json");
 const PRODUCTS_PATH = path.join(ROOT, "data", "products.json");
@@ -23,7 +25,7 @@ function json(res, status, body) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-KOL-Token",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
   });
   res.end(JSON.stringify(body));
@@ -520,6 +522,18 @@ function archiveRecord(payload) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") return json(res, 204, {});
+
+  // 设置了团队口令时，所有 /api/* 必须带正确口令（/health 放行用于连通性检测）。
+  if (
+    AUTH_TOKEN &&
+    req.url.startsWith("/api/") &&
+    req.headers["x-kol-token"] !== AUTH_TOKEN
+  ) {
+    return json(res, 401, {
+      error: "团队口令不正确或缺失，请在插件「服务器设置」里填写正确的口令。",
+      code: "UNAUTHORIZED"
+    });
+  }
 
   try {
     if (req.method === "GET" && req.url === "/health") {

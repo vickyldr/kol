@@ -1,4 +1,21 @@
-const API_BASE = "http://127.0.0.1:3210";
+let API_BASE = "http://127.0.0.1:3210";
+let API_TOKEN = "";
+
+// 与侧边栏共用的服务器配置（地址 + 团队口令），存在 chrome.storage.local。
+chrome.storage.local.get("kolConfig").then((stored) => {
+  if (stored.kolConfig) {
+    API_BASE = stored.kolConfig.apiBase || API_BASE;
+    API_TOKEN = stored.kolConfig.token || "";
+  }
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.kolConfig) {
+    const next = changes.kolConfig.newValue || {};
+    API_BASE = next.apiBase || "http://127.0.0.1:3210";
+    API_TOKEN = next.token || "";
+  }
+});
+
 const BUTTON_ID = "kol-assistant-floating-button";
 const TRANSLATION_CLASS = "kol-inline-translation";
 const translatedTexts = new Map();
@@ -129,9 +146,11 @@ async function requestTranslation(text) {
   if (translatedTexts.has(text)) return translatedTexts.get(text);
   if (pendingTexts.has(text)) return pendingTexts.get(text);
 
+  const headers = { "Content-Type": "application/json" };
+  if (API_TOKEN) headers["X-KOL-Token"] = API_TOKEN;
   const promise = fetch(`${API_BASE}/api/translate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ text }),
     signal: AbortSignal.timeout(30000)
   })

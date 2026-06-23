@@ -1,4 +1,23 @@
-const API_BASE = "http://127.0.0.1:3210";
+let API_BASE = "http://127.0.0.1:3210";
+let API_TOKEN = "";
+
+// 给受保护的接口附带团队口令。
+function authHeaders(base = {}) {
+  return API_TOKEN ? { ...base, "X-KOL-Token": API_TOKEN } : base;
+}
+
+async function loadConfig() {
+  try {
+    const stored = await chrome.storage.local.get("kolConfig");
+    if (stored.kolConfig) {
+      API_BASE = stored.kolConfig.apiBase || API_BASE;
+      API_TOKEN = stored.kolConfig.token || "";
+    }
+  } catch {
+    // 读取失败时沿用默认本机地址。
+  }
+}
+
 const messageInput = document.getElementById("message");
 const contextInput = document.getElementById("context");
 const operatorGoalInput = document.getElementById("operator-goal");
@@ -88,7 +107,9 @@ async function readSelectionFromPage() {
 async function loadProducts() {
   if (!serviceOnline) return;
   try {
-    const response = await fetch(`${API_BASE}/api/products`);
+    const response = await fetch(`${API_BASE}/api/products`, {
+      headers: authHeaders()
+    });
     const products = await response.json();
     const selected = productSelect.value;
     productSelect.replaceChildren();
@@ -187,7 +208,9 @@ function selectQuickTemplate(template) {
 async function loadQuickTemplates() {
   if (!serviceOnline) return;
   try {
-    const response = await fetch(`${API_BASE}/api/quick-templates`);
+    const response = await fetch(`${API_BASE}/api/quick-templates`, {
+      headers: authHeaders()
+    });
     quickTemplates = await response.json();
     if (!response.ok) throw new Error("读取快捷话术失败");
     renderTemplateCategories();
@@ -236,7 +259,7 @@ async function generateQuickTemplate() {
   try {
     const response = await fetch(`${API_BASE}/api/generate-template`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         templateId: selectedTemplate.id,
         productId: productSelect.value,
@@ -446,7 +469,7 @@ async function loadArchive(query = "") {
   if (!serviceOnline) return;
   const url = new URL(`${API_BASE}/api/archive`);
   if (query) url.searchParams.set("q", query);
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: authHeaders() });
   const records = await response.json();
   if (!response.ok) throw new Error(records.error || "读取存档失败");
   renderArchive(records);
@@ -629,7 +652,8 @@ async function translateProReply() {
 
 async function exportArchive() {
   const response = await fetch(`${API_BASE}/api/archive/export`, {
-    method: "POST"
+    method: "POST",
+    headers: authHeaders()
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "导出失败");
@@ -749,7 +773,7 @@ async function analyze() {
 
     const response = await fetch(`${API_BASE}/api/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         message,
         productId: productSelect.value,
@@ -795,7 +819,7 @@ async function askQwenDirectly() {
   try {
     const response = await fetch(`${API_BASE}/api/ask`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         question,
         message: messageInput.value.trim(),
@@ -920,5 +944,39 @@ document.querySelectorAll("[data-copy-value]").forEach((button) => {
   });
 });
 
-loadPendingMessage();
-checkService();
+// 服务器设置：填本机或团队 VPS 地址 + 团队口令，保存到 chrome.storage.local。
+const serverAddressInput = document.getElementById("server-address");
+const serverTokenInput = document.getElementById("server-token");
+const saveServerButton = document.getElementById("save-server");
+const serverSettingsStatus = document.getElementById("server-settings-status");
+
+function fillServerSettings() {
+  if (serverAddressInput) serverAddressInput.value = API_BASE;
+  if (serverTokenInput) serverTokenInput.value = API_TOKEN;
+}
+
+if (saveServerButton) {
+  saveServerButton.addEventListener("click", async () => {
+    const apiBase = serverAddressInput.value.trim().replace(/\/+$/, "");
+    const token = serverTokenInput.value.trim();
+    if (!apiBase) {
+      serverAddressInput.focus();
+      return;
+    }
+    API_BASE = apiBase;
+    API_TOKEN = token;
+    await chrome.storage.local.set({ kolConfig: { apiBase, token } });
+    serverSettingsStatus.textContent = "已保存，正在重新连接服务……";
+    serverSettingsStatus.classList.remove("hidden");
+    await checkService();
+    serverSettingsStatus.textContent = serviceOnline
+      ? "已连接到该服务器。"
+      : "保存了，但暂时连不上，请检查地址、口令和服务器防火墙。";
+  });
+}
+
+loadConfig().then(() => {
+  fillServerSettings();
+  loadPendingMessage();
+  checkService();
+});

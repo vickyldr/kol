@@ -19,6 +19,16 @@
         </div>
       </header>
 
+      <details class="server-settings">
+        <summary>⚙️ 服务器设置</summary>
+        <label for="server-address">服务地址</label>
+        <input id="server-address" type="text" placeholder="http://127.0.0.1:3210 或 http://你的VPS:3210" />
+        <label for="server-token">团队口令（VPS 部署时填，本机单人可留空）</label>
+        <input id="server-token" type="password" placeholder="团队共享口令" />
+        <button id="save-server" type="button" class="primary">保存并连接</button>
+        <p id="server-settings-status" class="template-status hidden"></p>
+      </details>
+
       <div class="product-bar">
         <label for="product">当前产品</label>
         <select id="product">
