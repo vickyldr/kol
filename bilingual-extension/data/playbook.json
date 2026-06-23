@@ -63,7 +63,7 @@
   {
     "product": "rythmix",
     "stage": "其他",
-    "name": "同类对比pua + 适当“示弱”+表达欣赏",
+    "name": "压价·同类对比示弱",
     "variables": [],
     "texts": {
       "中文": "英语\n葡语"
@@ -322,7 +322,7 @@
   {
     "product": "recco",
     "stage": "其他",
-    "name": "没有参考视频就直接发breif，有参考视频也可以再发一个br",
+    "name": "发送 brief",
     "variables": [
       "1. 内容",
       "1. 動画内容",
@@ -495,7 +495,7 @@
   {
     "product": "recco",
     "stage": "群聊",
-    "name": "确认脚本和拍摄注意事项。",
+    "name": "确认脚本和拍摄注意事项",
     "variables": [],
     "texts": {
       "中文": "街采的话\n尽量选择年龄较大的上班族；没有上班族那就看起来像大学生的，总之就是尽量看起来是这个app的受众群体\n白天室外拍摄为佳，自然光线充足；可选择繁华街道等人来人往之处，保持收音清晰\n若是夜晚拍摄请在室内光线明亮之处\n请注意人物着装符合广告审核",
@@ -661,7 +661,7 @@
   {
     "product": "vivavideo",
     "stage": "其他",
-    "name": "介绍我们的产品",
+    "name": "介绍产品",
     "variables": [],
     "texts": {
       "中文": "首先，让我向您介绍一下我们的应用程序：",
@@ -673,7 +673,7 @@
   {
     "product": "vivavideo",
     "stage": "其他",
-    "name": "不确定红人应该做什么视频，先大致简述一下我们的要求",
+    "name": "简述合作要求",
     "variables": [],
     "texts": {
       "中文": "我们希望您制作一个 45 秒的广告视频并将其发布到 TikTok/Instagram reel/ ytb shorts 上，视频想法我们会根据您的账号风格来共同商讨。\n另外，我们还会对您的视频进行二次使用与广告投放，这些在合同里面会确认，需要和您提前确认您是否接受；且这个使用权的期限我们希望是永久的。请问您的价格是多少呢？",
@@ -685,7 +685,7 @@
   {
     "product": "vivavideo",
     "stage": "其他",
-    "name": "确定红人要拍啥，并发送参考",
+    "name": "发送参考视频",
     "variables": [
       "链接或者视频文件"
     ],
@@ -699,7 +699,7 @@
   {
     "product": "vivavideo",
     "stage": "其他",
-    "name": "拉踩capcut。",
+    "name": "拉踩 CapCut",
     "variables": [],
     "texts": {
       "中文": "CapCut 是一款很棒的编辑应用程序。 我们不能说我们能做得更好。 老实说，Vivavideo 公司比 capcut 和 tiktok 小得多，但它让我们更贴近我们的用户。 我们深入研究更具体的用户需求。",
@@ -724,7 +724,7 @@
   {
     "product": "vivavideo",
     "stage": "其他",
-    "name": "一般已经砍了好几轮了，同时对面又是高质量红人",
+    "name": "砍价·多轮后让步",
     "variables": [],
     "texts": {
       "中文": "您好，我询问了我的领导，由于我们的预算有限，我们无法同意您的价格。但我们非常喜欢你的视频，我们可以为你的视频预算价格提升到XX美元，我们就可以开始合作。如果您同意的话，我们可以立刻开始。如果您不同意，我们只能暂停合作。祝您成功。",
@@ -1213,7 +1213,7 @@
   {
     "product": "vivacut",
     "stage": "其他",
-    "name": "介绍我们的产品",
+    "name": "介绍产品",
     "variables": [],
     "texts": {
       "中文": "首先，让我向您介绍一下我们的应用程序：\n\n通过这个片段，您可以了解视频编辑应用程序VivaCut，在这个应用程序中，许多视频设计师和内容制作者将他们的视频转换为“模板”，因此我们的应用程序包含许多易于使用的阿拉伯语模板。\n模板是一种顺序显示图片的方式，通过选择几张图片，你可以在大约三十秒内将它们转换成类似于当前时期抖音上最流行的视频（趋势）的视频。\n- 我邀请您下载并尝试我们的视频制作应用程序，如果体验愉快，请将该应用程序推荐给您的朋友",
@@ -1225,7 +1225,7 @@
   {
     "product": "vivacut",
     "stage": "其他",
-    "name": "不确定红人应该做什么视频，先大致简述一下我们的要求",
+    "name": "简述合作要求",
     "variables": [],
     "texts": {
       "中文": "我们希望您制作一个 45 秒的广告视频并将其发布到 TikTok/Instagram reel/ ytb shorts 上，视频想法我们会根据您的账号风格来共同商讨。\n另外，我们还会对您的视频进行二次使用与广告投放，这些在合同里面会确认，需要和您提前确认您是否接受；且这个使用权的期限我们希望是永久的。请问您的价格是多少呢？",
@@ -1237,7 +1237,7 @@
   {
     "product": "vivacut",
     "stage": "其他",
-    "name": "确定红人要拍啥，并发送参考",
+    "name": "发送参考视频",
     "variables": [
       "链接或者视频文件"
     ],
@@ -1251,7 +1251,7 @@
   {
     "product": "vivacut",
     "stage": "其他",
-    "name": "拉踩capcut。",
+    "name": "拉踩 CapCut",
     "variables": [],
     "texts": {
       "中文": "CapCut 是一款很棒的编辑应用程序。 我们不能说我们能做得更好。 老实说，VivaCut 公司比 capcut 和 tiktok 小得多，但它让我们更贴近我们的用户。 我们深入研究更具体的用户需求。",
@@ -1263,7 +1263,7 @@
   {
     "product": "vivacut",
     "stage": "其他",
-    "name": "一般已经砍了好几轮了，同时对面又是高质量红人",
+    "name": "砍价·多轮后让步",
     "variables": [],
     "texts": {
       "中文": "您好，我询问了我的领导，由于我们的预算有限，我们无法同意您的价格。但我们非常喜欢你的视频，我们可以为你的视频预算价格提升到XX美元，我们就可以开始合作。如果您同意的话，我们可以立刻开始。如果您不同意，我们只能暂停合作。祝您成功。",
@@ -1358,7 +1358,7 @@
   {
     "product": "rythmix",
     "stage": "其他",
-    "name": "忘记问了，随手补充一下",
+    "name": "忘记问了",
     "variables": [],
     "texts": {
       "西语": "Además, actualmente estamos buscando usuarios que hayan probado la app para dejarnos una reseña.\n1️⃣Por favor, deja una reseña de 5 estrellas en la App Store\n2️⃣El comentario debe tener más de 20 caracteres\nDespués de completar la reseña, ofreceremos un pago adicional de 5 USD.\nSi estás interesado(a), por favor envíanos la siguiente captura de pantalla después de publicar la reseña.",
@@ -1430,7 +1430,7 @@
   {
     "product": "rythmix",
     "stage": "谈价",
-    "name": "确定红人要拍啥，并发送参考+问价",
+    "name": "确定红人要拍啥",
     "variables": [
       "发送视频",
       "链接或者视频文件"
@@ -1446,7 +1446,7 @@
   {
     "product": "rythmix",
     "stage": "其他",
-    "name": "不确定红人应该做什么视频，先大致简述一下我们的要求",
+    "name": "简述合作要求",
     "variables": [],
     "texts": {
       "中文": "我们希望您制作一个 45 秒的广告视频并将其发布到 TikTok/Instagram reel/ ytb shorts 上，视频想法我们会根据您的账号风格来共同商讨。\n另外，我们还会对您的视频进行二次使用与广告投放，这些在合同里面会确认，需要和您提前确认您是否接受；且这个使用权的期限我们希望是永久的。请问您的价格是多少呢？",
@@ -1531,7 +1531,7 @@
   {
     "product": "rythmix",
     "stage": "谈价",
-    "name": "从这一步骤开始，确认好合作价格了，我们的合作可以正式开始~",
+    "name": "确认价格·正式开始",
     "variables": [],
     "texts": {
       "葡语": "Perfeito! Em seguida vou criar um grupo com meus colegas para avançarmos juntos na colaboração.",
@@ -1778,7 +1778,7 @@
   {
     "product": "rythmix",
     "stage": "其他",
-    "name": "确定红人要拍啥，并发送参考",
+    "name": "发送参考视频",
     "variables": [
       "发送视频",
       "给视频文件",
@@ -1800,7 +1800,7 @@
   {
     "product": "rythmix",
     "stage": "其他",
-    "name": "一般已经砍了好几轮了，同时对面又是高质量红人",
+    "name": "砍价·多轮后让步",
     "variables": [],
     "texts": {
       "中文": "您好，我询问了我的领导，由于我们的预算有限，我们无法同意您的价格。但我们非常喜欢你的视频，我们可以为你的视频预算价格提升到XX美元，我们就可以开始合作。如果您同意的话，我们可以立刻开始。如果您不同意，我们只能暂停合作。祝您成功。"
