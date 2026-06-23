@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KOL 双语沟通助手</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">Multi-product · KOL Copilot</p>
+          <h1>双语沟通助手</h1>
+        </div>
+        <div class="header-actions">
+          <button id="open-archive" class="status archive-entry" title="查看已保存的话术库">📚 话术库</button>
+          <button id="service-status" class="status" title="点击重新检测">检测中</button>
+        </div>
+      </header>
+
+      <section class="quick-template-card">
+        <label for="product">当前产品</label>
+        <select id="product">
+          <option value="generic">通用产品（不带品牌细节）</option>
+        </select>
+        <div class="card-heading">
+          <div>
+            <span class="card-label">主动话术快捷库</span>
+            <h2>选择场景，直接生成</h2>
+          </div>
+          <select id="target-language" class="language-select">
+            <option value="英语">英语</option>
+            <option value="日语">日语</option>
+            <option value="韩语">韩语</option>
+            <option value="繁体中文">繁中（台湾）</option>
+            <option value="土耳其语">土耳其语</option>
+            <option value="西班牙语">西班牙语</option>
+            <option value="葡萄牙语">葡萄牙语</option>
+            <option value="意大利语">意大利语</option>
+            <option value="德语">德语</option>
+            <option value="法语">法语</option>
+            <option value="俄语">俄语</option>
+            <option value="阿拉伯语">阿拉伯语</option>
+            <option value="泰语">泰语</option>
+          </select>
+        </div>
+        <div class="template-select-grid">
+          <div>
+            <label for="template-category-select">场景分类</label>
+            <select id="template-category-select"></select>
+          </div>
+          <div>
+            <label for="template-select">具体话术</label>
+            <select id="template-select"></select>
+          </div>
+        </div>
+        <p id="template-description" class="template-description"></p>
+        <div id="template-variables" class="template-variables hidden"></div>
+        <button id="generate-template" class="primary generate-template hidden">生成这条话术</button>
+        <p id="template-status" class="template-status hidden"></p>
+      </section>
+
+      <section class="input-card">
+        <label for="message">红人的消息</label>
+        <textarea id="message" rows="7" placeholder="选中 Instagram 消息后打开插件，或直接粘贴到这里……"></textarea>
+        <details class="context-box">
+          <summary>补充上下文（可选）</summary>
+          <label for="context">最近几句对话或已确认条件</label>
+          <textarea id="context" rows="4" placeholder="例如：已谈妥 300 USD、发布 IG 和 TikTok、广告授权 30 天……"></textarea>
+          <label for="operator-goal">你想怎么回复</label>
+          <input id="operator-goal" type="text" placeholder="例如：委婉砍到 250 USD，语气友好" />
+        </details>
+        <div class="button-row">
+          <button id="load-selection" class="secondary">读取当前选中文字</button>
+          <button id="analyze" class="primary">分析并建议回复</button>
+        </div>
+        <p id="request-error" class="request-error hidden"></p>
+      </section>
+
+      <section class="ask-card">
+        <div class="card-heading">
+          <span class="card-label">直接问千问</span>
+          <small>可纠错、追问原文或让它重写回复</small>
+        </div>
+        <textarea id="ask-question" rows="3" placeholder="例如：你是不是把主客体翻反了？对方到底让谁发送发票？"></textarea>
+        <button id="ask-qwen" class="primary ask-button">发送问题</button>
+        <p id="ask-answer" class="ask-answer hidden"></p>
+      </section>
+
+      <section id="empty-state" class="empty-state">
+        <div class="empty-icon">↗</div>
+        <p>先放入一段红人的消息。</p>
+        <small>工具会判断对方意图、匹配话术并给出中英文回复。</small>
+      </section>
+
+      <section id="result" class="result hidden">
+        <div class="summary-grid">
+          <article><span>识别语言</span><strong id="language"></strong></article>
+          <article><span>合作阶段</span><strong id="stage"></strong></article>
+        </div>
+
+        <article class="card">
+          <span class="card-label">对方意图</span>
+          <h2 id="intent"></h2>
+          <p id="interpretation"></p>
+          <p id="implied-meaning" class="implied-meaning"></p>
+        </article>
+
+        <article id="mentioned-items-card" class="mentioned-card hidden">
+          <span class="card-label">对方新提到的事项</span>
+          <div id="mentioned-items"></div>
+        </article>
+
+        <article class="card reply-card">
+          <div class="card-heading">
+            <span class="card-label">建议外语回复</span>
+            <div class="heading-buttons">
+              <button class="save-trigger secondary" type="button">保存为话术</button>
+              <button data-copy-value="reply-target">复制</button>
+            </div>
+          </div>
+          <textarea id="reply-target" class="reply-editor" rows="7" placeholder="外语最终回复"></textarea>
+          <div class="reply-toolbar">
+            <button id="translate-to-chinese" class="editor-tool">外语 → 中文校对</button>
+            <label class="reply-language-label">回复语言
+              <select id="reply-language" class="reply-language-select">
+                <option value="">自动（跟随红人语言）</option>
+                <option value="英语">英语</option>
+                <option value="日语">日语</option>
+                <option value="韩语">韩语</option>
+                <option value="繁体中文">繁中（台湾）</option>
+                <option value="土耳其语">土耳其语</option>
+                <option value="西班牙语">西班牙语</option>
+                <option value="葡萄牙语">葡萄牙语</option>
+                <option value="意大利语">意大利语</option>
+                <option value="德语">德语</option>
+                <option value="法语">法语</option>
+                <option value="俄语">俄语</option>
+                <option value="阿拉伯语">阿拉伯语</option>
+                <option value="泰语">泰语</option>
+              </select>
+            </label>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-heading">
+            <span class="card-label">中文回复 / 写作意图</span>
+            <div class="heading-buttons">
+              <button class="save-trigger secondary" type="button">保存为话术</button>
+              <button data-copy-value="reply-zh">复制</button>
+            </div>
+          </div>
+          <textarea id="reply-zh" class="reply-editor" rows="7" placeholder="可以写完整中文回复，也可以只写：委婉劝他修改，给出三点理由……"></textarea>
+          <button id="generate-from-chinese" class="editor-tool primary">按中文意图生成双语回复</button>
+          <small class="editor-tip">千问会判断你写的是正式回复还是大概意图，并按上面选择的「回复语言」生成自然外语及准确中文对照。</small>
+        </article>
+
+        <article id="internal-guidance" class="internal-card">
+          <div class="internal-heading">
+            <span id="internal-level">内部处理建议</span>
+            <strong>禁止外发</strong>
+          </div>
+          <p id="internal-explanation"></p>
+          <div id="tl-question-box" class="internal-section hidden">
+            <span>建议询问 TL</span>
+            <p id="tl-question"></p>
+            <button data-copy="tl-question">复制给 TL</button>
+          </div>
+          <div id="temporary-reply-box" class="internal-section hidden">
+            <span>等待确认期间，可先回复红人</span>
+            <p id="temporary-reply-target"></p>
+            <small id="temporary-reply-chinese"></small>
+            <button data-copy="temporary-reply-target">复制临时回复</button>
+          </div>
+          <ul id="operator-reminders"></ul>
+        </article>
+
+        <article class="risk-card">
+          <span>发送前风险</span>
+          <p id="risk"></p>
+        </article>
+
+        <details class="card alternatives">
+          <summary>查看备选回复</summary>
+          <p id="alternative-target"></p>
+          <div class="divider"></div>
+          <p id="alternative-zh"></p>
+        </details>
+
+        <article id="missing-card" class="card hidden">
+          <span class="card-label">需要填写的变量</span>
+          <ul id="missing-information"></ul>
+        </article>
+
+        <section class="archive-actions">
+          <button id="save-scenario" class="primary">保存为确认话术</button>
+          <button id="toggle-archive" class="secondary">查看话术存档</button>
+        </section>
+      </section>
+
+      <section id="archive-panel" class="archive-panel hidden">
+        <div class="card-heading">
+          <div>
+            <span class="card-label">本地话术存档</span>
+            <h2>已确认场景</h2>
+          </div>
+          <button id="export-archive" class="secondary">导出备份</button>
+        </div>
+        <input id="archive-search" type="search" placeholder="搜索场景、回复或备注" />
+        <div id="archive-list"></div>
+      </section>
+
+      <dialog id="save-dialog">
+        <form method="dialog" id="save-form">
+          <h2>保存为确认话术</h2>
+          <div id="save-preview" class="save-preview">
+            <span class="save-preview-label">本次将保存以下内容</span>
+            <dl>
+              <dt>外语回复</dt>
+              <dd id="preview-target">—</dd>
+              <dt>中文回复</dt>
+              <dd id="preview-chinese">—</dd>
+            </dl>
+          </div>
+          <label for="scene-name">场景名称</label>
+          <input id="scene-name" required placeholder="例如：突然要求提供付款结算文件" />
+          <label for="scene-notes">运营备注</label>
+          <textarea id="scene-notes" rows="3" placeholder="TL 最终确认、适用条件或注意事项"></textarea>
+          <div class="dialog-actions">
+            <button id="cancel-save" type="button" class="secondary">取消</button>
+            <button id="confirm-save" value="default" class="primary">确认保存</button>
+          </div>
+        </form>
+      </dialog>
+    </main>
+    <script src="knowledge.js"></script>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "KOL 双语沟通助手",
+  "version": "0.8.2",
+  "description": "理解红人消息、匹配内部话术并生成双语回复建议。",
+  "permissions": ["activeTab", "contextMenus", "sidePanel", "storage"],
+  "host_permissions": [
+    "http://127.0.0.1:3210/*",
+    "https://www.instagram.com/*",
+    "https://mail.google.com/*",
+    "https://outlook.live.com/*",
+    "https://outlook.office.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.instagram.com/*",
+        "https://mail.google.com/*",
+        "https://outlook.live.com/*",
+        "https://outlook.office.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "打开 KOL 双语沟通助手"
+  }
+}
