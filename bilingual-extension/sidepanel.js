@@ -1,4 +1,4 @@
-let API_BASE = "http://127.0.0.1:3210";
+let API_BASE = "http://106.54.206.174:3210";
 let API_TOKEN = "";
 let API_ADMIN = "";
 
