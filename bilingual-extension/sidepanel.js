@@ -72,6 +72,12 @@ const replyTargetProInput = document.getElementById("reply-target-pro");
 const replyChineseProInput = document.getElementById("reply-zh-pro");
 const translateProButton = document.getElementById("translate-pro");
 
+// 选话术（多语言话术库）相关元素
+const playbookDialog = document.getElementById("playbook-dialog");
+const playbookStage = document.getElementById("playbook-stage");
+const playbookSearch = document.getElementById("playbook-search");
+const playbookList = document.getElementById("playbook-list");
+
 let serviceOnline = false;
 let waitTimer = null;
 let lastAnalysis = null;
@@ -81,6 +87,8 @@ let selectedTemplate = null;
 let lastProScene = "";
 let lastProCategory = "主动话术";
 let pendingSave = null;
+let playbook = [];
+let playbookTarget = "reactive";
 
 function switchMode(mode) {
   const reactive = mode !== "proactive";
@@ -359,6 +367,7 @@ async function checkService() {
     statusButton.title = `${health.provider} · ${health.model}`;
     await loadProducts();
     await loadQuickTemplates();
+    await loadPlaybook();
   } catch {
     serviceOnline = false;
     statusButton.textContent = "AI 未启动";
@@ -923,6 +932,186 @@ async function handleImportFile(file) {
   await loadArchive(archiveSearch.value.trim());
 }
 
+async function loadPlaybook() {
+  if (!serviceOnline) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/playbook`, {
+      headers: authHeaders()
+    });
+    const data = await response.json();
+    playbook = Array.isArray(data) ? data : [];
+  } catch {
+    playbook = [];
+  }
+}
+
+function openPlaybookPicker(target) {
+  playbookTarget = target;
+  const stages = [...new Set(playbook.map((e) => e.stage))];
+  playbookStage.replaceChildren();
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "全部阶段";
+  playbookStage.appendChild(all);
+  for (const s of stages) {
+    const o = document.createElement("option");
+    o.value = s;
+    o.textContent = s;
+    playbookStage.appendChild(o);
+  }
+  playbookSearch.value = "";
+  renderPlaybookList();
+  playbookDialog.showModal();
+}
+
+function renderPlaybookList() {
+  const product = productSelect.value;
+  const stage = playbookStage.value;
+  const q = playbookSearch.value.trim().toLowerCase();
+  const items = playbook.filter((e) => {
+    if (e.product !== "通用" && e.product !== product) return false;
+    if (stage && e.stage !== stage) return false;
+    if (
+      q &&
+      !e.name.toLowerCase().includes(q) &&
+      !JSON.stringify(e.texts).toLowerCase().includes(q)
+    ) {
+      return false;
+    }
+    return true;
+  });
+  playbookList.replaceChildren();
+  if (!items.length) {
+    const p = document.createElement("p");
+    p.className = "archive-meta";
+    p.textContent = "没有匹配的话术。换个产品 / 阶段，或清空搜索再试。";
+    playbookList.appendChild(p);
+    return;
+  }
+  for (const e of items) playbookList.appendChild(buildPlaybookItem(e));
+}
+
+function buildPlaybookItem(entry) {
+  const item = document.createElement("article");
+  item.className = "archive-item";
+  const h = document.createElement("h3");
+  h.textContent = entry.name;
+  const meta = document.createElement("p");
+  meta.className = "archive-meta";
+  meta.textContent = `${entry.product} · ${entry.stage} · ${Object.keys(entry.texts).join(" / ")}`;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "secondary";
+  btn.textContent = "选用";
+  btn.addEventListener("click", () => expandPlaybookItem(item, entry));
+  item.append(h, meta, btn);
+  return item;
+}
+
+function expandPlaybookItem(item, entry) {
+  item.replaceChildren();
+  const h = document.createElement("h3");
+  h.textContent = entry.name;
+  item.appendChild(h);
+
+  const langs = Object.keys(entry.texts);
+  let chosenLang = langs[0];
+
+  const preview = document.createElement("div");
+  preview.className = "playbook-preview";
+  preview.textContent = entry.texts[chosenLang];
+
+  const langRow = document.createElement("div");
+  langRow.className = "playbook-langs";
+  const chips = [];
+  for (const l of langs) {
+    const c = document.createElement("button");
+    c.type = "button";
+    c.className = `lang-chip${l === chosenLang ? " active" : ""}`;
+    c.textContent = l;
+    c.addEventListener("click", () => {
+      chosenLang = l;
+      chips.forEach((x) => x.classList.remove("active"));
+      c.classList.add("active");
+      preview.textContent = entry.texts[l];
+    });
+    chips.push(c);
+    langRow.appendChild(c);
+  }
+  item.appendChild(langRow);
+
+  const varInputs = {};
+  if (entry.variables.length) {
+    const vbox = document.createElement("div");
+    vbox.className = "playbook-vars";
+    for (const v of entry.variables) {
+      const lab = document.createElement("label");
+      lab.textContent = v;
+      const inp = document.createElement("input");
+      inp.placeholder = `填写${v}`;
+      varInputs[v] = inp;
+      vbox.append(lab, inp);
+    }
+    item.appendChild(vbox);
+  }
+
+  item.appendChild(preview);
+
+  const apply = document.createElement("button");
+  apply.type = "button";
+  apply.className = "primary";
+  apply.textContent = "用这条（填进回复框）";
+  apply.addEventListener("click", () =>
+    applyPlaybook(entry, chosenLang, varInputs)
+  );
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "secondary";
+  back.textContent = "返回";
+  back.addEventListener("click", () => item.replaceWith(buildPlaybookItem(entry)));
+  const actions = document.createElement("div");
+  actions.className = "archive-item-actions";
+  actions.append(apply, back);
+  item.appendChild(actions);
+}
+
+function substituteVars(text, varInputs) {
+  let t = text || "";
+  for (const [k, inp] of Object.entries(varInputs)) {
+    const val = inp.value.trim();
+    if (!val) continue;
+    t = t
+      .split(`{{${k}}}`).join(val)
+      .split(`【${k}】`).join(val)
+      .split(`{${k}}`).join(val)
+      .split(`[${k}]`).join(val);
+    if (k === "价格") t = t.replace(/XXXX|XXX/g, val);
+  }
+  return t;
+}
+
+function applyPlaybook(entry, lang, varInputs) {
+  const text = substituteVars(entry.texts[lang] || "", varInputs);
+  const zh = substituteVars(entry.texts["中文"] || "", varInputs);
+  if (playbookTarget === "proactive") {
+    replyTargetProInput.value = text;
+    replyChineseProInput.value = lang === "中文" ? "" : zh;
+    lastProScene = entry.name;
+    lastProCategory = entry.stage;
+    resultPro.classList.remove("hidden");
+    switchMode("proactive");
+    resultPro.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else {
+    replyTargetInput.value = text;
+    replyChineseInput.value = lang === "中文" ? "" : zh;
+    emptyState.classList.add("hidden");
+    result.classList.remove("hidden");
+    switchMode("reactive");
+    result.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  playbookDialog.close();
+}
+
 async function exportArchive() {
   const response = await fetch(`${API_BASE}/api/archive/export`, {
     method: "POST",
@@ -1123,6 +1312,17 @@ document.getElementById("analyze").addEventListener("click", analyze);
 generateTemplateButton.addEventListener("click", generateQuickTemplate);
 generateFreeButton.addEventListener("click", generateFreeReply);
 translateProButton.addEventListener("click", translateProReply);
+document
+  .getElementById("open-playbook-reactive")
+  .addEventListener("click", () => openPlaybookPicker("reactive"));
+document
+  .getElementById("open-playbook-proactive")
+  .addEventListener("click", () => openPlaybookPicker("proactive"));
+document
+  .getElementById("playbook-close")
+  .addEventListener("click", () => playbookDialog.close());
+playbookStage.addEventListener("change", renderPlaybookList);
+playbookSearch.addEventListener("input", renderPlaybookList);
 templateCategorySelect.addEventListener("change", () => {
   renderTemplateButtons(templateCategorySelect.value);
 });

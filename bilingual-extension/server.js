@@ -16,6 +16,7 @@ const DATA_DIR = process.env.KOL_DATA_DIR || path.join(ROOT, "data");
 // 随代码更新的内置资料：知识库、快捷模板。
 const KNOWLEDGE_PATH = path.join(ROOT, "data", "knowledge-base.json");
 const QUICK_TEMPLATES_PATH = path.join(ROOT, "data", "quick-templates.json");
+const PLAYBOOK_PATH = path.join(ROOT, "data", "playbook.json");
 // 用户数据：产品资料、话术存档（放持久目录）。
 const PRODUCTS_PATH = path.join(DATA_DIR, "products.json");
 const ARCHIVE_PATH = path.join(DATA_DIR, "scenario-archive.json");
@@ -577,6 +578,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && req.url === "/api/quick-templates") {
       return json(res, 200, loadJson(QUICK_TEMPLATES_PATH, []));
+    }
+
+    if (req.method === "GET" && req.url === "/api/playbook") {
+      return json(res, 200, loadJson(PLAYBOOK_PATH, []));
     }
 
     if (req.method === "GET" && req.url.startsWith("/api/archive")) {

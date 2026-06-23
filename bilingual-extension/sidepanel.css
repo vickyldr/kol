@@ -89,6 +89,21 @@ button { border: 0; border-radius: 10px; cursor: pointer; font: 700 12px/1 syste
 .card-heading button { padding: 6px 9px; color: #5b50c6; background: #efedff; }
 .heading-buttons { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .archive-new-form { margin: 4px 0 10px; }
+.playbook-entry { width: 100%; min-height: 38px; margin-top: 9px; }
+#playbook-dialog { width: min(420px, calc(100vw - 24px)); max-height: 86vh; padding: 16px; overflow-y: auto; }
+.playbook-head { display: flex; align-items: center; justify-content: space-between; }
+.playbook-head h2 { margin: 0; font-size: 18px; }
+.playbook-head button { padding: 6px 12px; }
+.playbook-filters { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin: 12px 0; }
+.playbook-filters select, .playbook-filters input { margin: 0; }
+.playbook-langs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.lang-chip { padding: 6px 11px; color: #5b50c6; background: #efedff; border-radius: 999px; }
+.lang-chip.active { color: #fff; background: linear-gradient(135deg, #6d5dfc, #3f74e8); }
+.playbook-vars { margin: 6px 0; padding: 10px; border-radius: 11px; background: #f6f5ff; }
+.playbook-vars label { display: block; margin-top: 7px; }
+.playbook-vars label:first-child { margin-top: 0; }
+.playbook-vars input { margin-bottom: 4px; background: #fff; }
+.playbook-preview { margin: 8px 0; padding: 10px; max-height: 200px; overflow-y: auto; border-radius: 10px; background: #f5f6fa; color: #30384d; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
 .heading-buttons .save-trigger { color: #4f46b8; background: #e6e3ff; }
 .reply-toolbar { display: flex; gap: 8px; align-items: flex-end; }
 .reply-toolbar .editor-tool { flex: 1; }
