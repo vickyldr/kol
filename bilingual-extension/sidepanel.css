@@ -87,7 +87,8 @@ button { border: 0; border-radius: 10px; cursor: pointer; font: 700 12px/1 syste
 .editor-tip { display: block; margin-top: 7px; color: #81879a; font-size: 10px; line-height: 1.45; }
 .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .card-heading button { padding: 6px 9px; color: #5b50c6; background: #efedff; }
-.heading-buttons { display: flex; gap: 6px; flex-shrink: 0; }
+.heading-buttons { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.archive-new-form { margin: 4px 0 10px; }
 .heading-buttons .save-trigger { color: #4f46b8; background: #e6e3ff; }
 .reply-toolbar { display: flex; gap: 8px; align-items: flex-end; }
 .reply-toolbar .editor-tool { flex: 1; }

@@ -270,12 +270,18 @@
       <section id="archive-panel" class="archive-panel hidden">
         <div class="card-heading">
           <div>
-            <span class="card-label">本地话术存档</span>
+            <span class="card-label">话术库</span>
             <h2>已确认场景</h2>
           </div>
-          <button id="export-archive" class="secondary">导出备份</button>
+          <div class="heading-buttons">
+            <button id="new-archive" class="secondary" type="button">+ 新增</button>
+            <button id="import-archive" class="secondary" type="button">导入</button>
+            <button id="export-archive" class="secondary" type="button">导出备份</button>
+          </div>
         </div>
+        <input id="import-file" type="file" accept="application/json,.json" hidden />
         <input id="archive-search" type="search" placeholder="搜索场景、回复或备注" />
+        <div id="new-archive-form" class="archive-new-form hidden"></div>
         <div id="archive-list"></div>
       </section>
 

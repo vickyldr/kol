@@ -10,10 +10,15 @@ const AUTH_TOKEN = process.env.KOL_ASSISTANT_TOKEN || "";
 // 管理员口令：设置后，只有带正确管理员口令的请求才能编辑/删除已有话术。
 const ADMIN_TOKEN = process.env.KOL_ASSISTANT_ADMIN_TOKEN || "";
 const ROOT = __dirname;
+// 用户数据目录（话术库、产品）：部署时指向独立目录，更新代码不会覆盖它。
+// 未设置时回退到代码自带的 data/，保持本机单人模式不变。
+const DATA_DIR = process.env.KOL_DATA_DIR || path.join(ROOT, "data");
+// 随代码更新的内置资料：知识库、快捷模板。
 const KNOWLEDGE_PATH = path.join(ROOT, "data", "knowledge-base.json");
-const PRODUCTS_PATH = path.join(ROOT, "data", "products.json");
-const ARCHIVE_PATH = path.join(ROOT, "data", "scenario-archive.json");
 const QUICK_TEMPLATES_PATH = path.join(ROOT, "data", "quick-templates.json");
+// 用户数据：产品资料、话术存档（放持久目录）。
+const PRODUCTS_PATH = path.join(DATA_DIR, "products.json");
+const ARCHIVE_PATH = path.join(DATA_DIR, "scenario-archive.json");
 
 const REPLY_STYLE = `统一回复风格（生成任何对外回复时必须严格遵守）：
 - 简洁：只说必要的话，不堆砌客套、不重复，一般 2-4 句，能短不长。

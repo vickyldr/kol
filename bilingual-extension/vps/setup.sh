@@ -30,7 +30,22 @@ if [ -z "$DASH_KEY" ] || [ -z "$TOKEN" ]; then
   exit 1
 fi
 
-echo "== 3/4 写入开机自启服务 =="
+echo "== 3/4 准备数据目录 + 写入开机自启服务 =="
+# 话术库、产品资料放在独立目录，更新代码不会覆盖它们。
+DATA_DIR="$HOME/kol-data"
+mkdir -p "$DATA_DIR"
+# 首次部署时把内置默认资料拷过去；已存在则保留，绝不覆盖你的数据。
+if [ ! -f "$DATA_DIR/products.json" ] && [ -f "$DIR/data/products.json" ]; then
+  cp "$DIR/data/products.json" "$DATA_DIR/"
+fi
+if [ ! -f "$DATA_DIR/scenario-archive.json" ]; then
+  if [ -f "$DIR/data/scenario-archive.json" ]; then
+    cp "$DIR/data/scenario-archive.json" "$DATA_DIR/"
+  else
+    echo "[]" > "$DATA_DIR/scenario-archive.json"
+  fi
+fi
+
 SERVICE=/etc/systemd/system/kol-assistant.service
 sudo tee "$SERVICE" >/dev/null <<EOF
 [Unit]
@@ -45,6 +60,7 @@ Environment=KOL_ASSISTANT_PORT=$PORT
 Environment=DASHSCOPE_API_KEY=$DASH_KEY
 Environment=KOL_ASSISTANT_TOKEN=$TOKEN
 Environment=KOL_ASSISTANT_ADMIN_TOKEN=$ADMIN_TOKEN
+Environment=KOL_DATA_DIR=$DATA_DIR
 ExecStart=$(command -v node) $DIR/server.js
 Restart=always
 RestartSec=3

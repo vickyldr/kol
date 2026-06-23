@@ -798,6 +798,131 @@ async function translateProReply() {
   }
 }
 
+// 手动新增话术（所有成员可用）：空白表单直接填写并保存为新话术。
+function openNewArchiveForm() {
+  const box = document.getElementById("new-archive-form");
+  box.classList.remove("hidden");
+  box.replaceChildren();
+
+  const card = document.createElement("article");
+  card.className = "archive-item editing";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "手动新增话术";
+  card.appendChild(heading);
+
+  const mkField = (labelText, rows, placeholder) => {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const field = rows
+      ? document.createElement("textarea")
+      : document.createElement("input");
+    if (rows) field.rows = rows;
+    if (placeholder) field.placeholder = placeholder;
+    card.append(label, field);
+    return field;
+  };
+
+  const nameField = mkField("场景名称", 0, "例如：催初稿（礼貌版）");
+  const targetField = mkField("外语回复", 4, "可留空");
+  const chineseField = mkField("中文回复 / 说明", 4, "");
+  const notesField = mkField("运营备注", 2, "适用条件、注意事项");
+
+  const actions = document.createElement("div");
+  actions.className = "archive-item-actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "primary";
+  saveBtn.textContent = "保存新话术";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "secondary";
+  cancelBtn.textContent = "取消";
+  cancelBtn.addEventListener("click", () => {
+    box.replaceChildren();
+    box.classList.add("hidden");
+  });
+  saveBtn.addEventListener("click", async () => {
+    const sceneName = nameField.value.trim();
+    if (!sceneName) {
+      nameField.focus();
+      return;
+    }
+    saveBtn.disabled = true;
+    saveBtn.textContent = "保存中…";
+    try {
+      const response = await fetch(`${API_BASE}/api/archive`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          product_id: productSelect.value,
+          scene_name: sceneName,
+          external_reply_target: targetField.value.trim(),
+          external_reply_chinese: chineseField.value.trim(),
+          notes: notesField.value.trim()
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "保存失败。");
+      box.replaceChildren();
+      box.classList.add("hidden");
+      await loadArchive(archiveSearch.value.trim());
+    } catch (error) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "保存新话术";
+      const tip = document.createElement("p");
+      tip.className = "request-error";
+      tip.textContent = error.message;
+      card.appendChild(tip);
+    }
+  });
+  actions.append(saveBtn, cancelBtn);
+  card.appendChild(actions);
+  box.appendChild(card);
+}
+
+// 导入：上传导出过的 JSON，逐条作为新话术加入（去掉 id 避免覆盖已有）。
+async function handleImportFile(file) {
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    window.alert("这个文件不是有效的 JSON，请选择导出备份生成的文件。");
+    return;
+  }
+  const records = Array.isArray(data) ? data : data.records || [];
+  if (!records.length) {
+    window.alert("文件里没有可导入的话术。");
+    return;
+  }
+  let ok = 0;
+  for (const r of records) {
+    try {
+      const response = await fetch(`${API_BASE}/api/archive`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          product_id: r.product_id || "generic",
+          scene_name: r.scene_name || "导入话术",
+          stage: r.stage || "",
+          trigger_examples: r.trigger_examples || [],
+          correct_understanding: r.correct_understanding || "",
+          external_reply_target: r.external_reply_target || "",
+          external_reply_chinese: r.external_reply_chinese || "",
+          internal_guidance: r.internal_guidance || {},
+          required_variables: r.required_variables || [],
+          notes: r.notes || ""
+        })
+      });
+      if (response.ok) ok += 1;
+    } catch {
+      // 单条失败跳过，继续导入其余。
+    }
+  }
+  window.alert(`导入完成：成功 ${ok} / ${records.length} 条。`);
+  await loadArchive(archiveSearch.value.trim());
+}
+
 async function exportArchive() {
   const response = await fetch(`${API_BASE}/api/archive/export`, {
     method: "POST",
@@ -1056,6 +1181,17 @@ archiveSearch.addEventListener("input", () => {
   archiveSearchTimer = setTimeout(() => loadArchive(archiveSearch.value.trim()), 300);
 });
 document.getElementById("export-archive").addEventListener("click", exportArchive);
+document
+  .getElementById("new-archive")
+  .addEventListener("click", openNewArchiveForm);
+document.getElementById("import-archive").addEventListener("click", () => {
+  document.getElementById("import-file").click();
+});
+document.getElementById("import-file").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (file) await handleImportFile(file);
+});
 document.getElementById("load-selection").addEventListener("click", async () => {
   const selected = await readSelectionFromPage();
   if (selected) messageInput.value = selected;
