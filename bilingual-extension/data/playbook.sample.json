@@ -1,0 +1,28 @@
+[
+  {
+    "id": "rm_dm_invite",
+    "product": "rythmix",
+    "stage": "触达",
+    "name": "付费合作邀约（私信）",
+    "variables": ["你的英文名"],
+    "texts": {
+      "中文": "你好！我是 Rythmix 團隊的 {{你的英文名}} 🙂我們是做 AI 音樂的 App，你可以先看看我們 IG @rythmixapp 的作品。\n這次想邀請你合作拍一支短影片（小於 1 分鐘），展示 Rythmix 的 AI 音樂影片功能～影片可以放在 Reels / TikTok / YouTube Shorts！\n如果你有興趣，方便提供一下資訊嗎？\n✔ 可上傳的平台\n✔ 報價\n✔ 拍攝＆上傳時間\n期待你的回覆～謝謝！",
+      "西语": "Invitación para trabajar con Rythmix\nHola, somos Rythmix.\nNuestra app permite generar canciones y videos musicales con IA de una forma muy sencilla, y creemos que tu contenido podría encajar muy bien con ella.\nQueríamos saber si te interesaría una colaboración patrocinada. Nosotros te proporcionaríamos acceso a la app y te pediríamos un video corto para Reels o TikTok, con una remuneración acordada entre ambas partes.",
+      "葡语": "💰 Parceria com criadores – Rythmix\nOlá! Somos da equipe do Rythmix, um aplicativo que permite criar músicas e videoclipes usando inteligência artificial.\nGostaríamos de fazer uma parceria com você: oferecemos acesso gratuito ao app + a criação de um vídeo curto para Reels ou TikTok, com remuneração pela colaboração."
+    },
+    "notes": "首次私信触达。@rythmixapp 为固定官方号，{{你的英文名}} 填触达人名字。"
+  },
+  {
+    "id": "bargain_budget_limited",
+    "product": "通用",
+    "stage": "谈价",
+    "name": "压价 · 预算不够",
+    "variables": [],
+    "texts": {
+      "中文": "我们目前是公司内部的新项目，整体还处在发展阶段，因此预算还没有完全释放出来，目前能申请到的额度比较有限。",
+      "英语": "This is a relatively new project within our company, still in the development stage, so the overall budget has not been fully released yet and the current allocated amount is limited.",
+      "葡语": "Este é um projeto novo dentro da nossa empresa, ainda em fase de desenvolvimento, então o orçamento ainda não foi totalmente liberado e o valor disponível no momento é limitado."
+    },
+    "notes": "压价话术，不含产品信息，所有产品通用。"
+  }
+]
