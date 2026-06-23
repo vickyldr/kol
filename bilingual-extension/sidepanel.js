@@ -1,9 +1,20 @@
 let API_BASE = "http://127.0.0.1:3210";
 let API_TOKEN = "";
+let API_ADMIN = "";
 
 // 给受保护的接口附带团队口令。
 function authHeaders(base = {}) {
   return API_TOKEN ? { ...base, "X-KOL-Token": API_TOKEN } : base;
+}
+
+// 编辑/删除话术等管理员操作，额外附带管理员口令。
+function adminHeaders(base = {}) {
+  const headers = authHeaders(base);
+  return API_ADMIN ? { ...headers, "X-KOL-Admin": API_ADMIN } : headers;
+}
+
+function isAdminUser() {
+  return Boolean(API_ADMIN);
 }
 
 async function loadConfig() {
@@ -12,6 +23,7 @@ async function loadConfig() {
     if (stored.kolConfig) {
       API_BASE = stored.kolConfig.apiBase || API_BASE;
       API_TOKEN = stored.kolConfig.token || "";
+      API_ADMIN = stored.kolConfig.adminToken || "";
     }
   } catch {
     // 读取失败时沿用默认本机地址。
@@ -445,23 +457,159 @@ function renderArchive(records) {
     archiveList.appendChild(empty);
     return;
   }
-
   for (const record of records) {
-    const item = document.createElement("article");
-    item.className = "archive-item";
-    const title = document.createElement("h3");
-    title.textContent = record.scene_name;
-    const meta = document.createElement("p");
-    meta.className = "archive-meta";
-    meta.textContent = `${record.product_id} · ${record.stage || "未分类"} · v${record.version}`;
-    const understanding = document.createElement("p");
-    understanding.textContent = record.correct_understanding || "暂无理解说明";
-    const reply = document.createElement("p");
-    reply.textContent = record.external_reply_chinese
-      ? `回复：${record.external_reply_chinese}`
-      : "暂无外发回复";
-    item.append(title, meta, understanding, reply);
-    archiveList.appendChild(item);
+    archiveList.appendChild(buildArchiveItem(record));
+  }
+}
+
+function buildArchiveItem(record) {
+  const item = document.createElement("article");
+  item.className = "archive-item";
+
+  const title = document.createElement("h3");
+  title.textContent = record.scene_name;
+  const meta = document.createElement("p");
+  meta.className = "archive-meta";
+  meta.textContent = `${record.product_id} · ${record.stage || "未分类"} · v${record.version}`;
+  const understanding = document.createElement("p");
+  understanding.textContent = record.correct_understanding || "暂无理解说明";
+  const target = document.createElement("p");
+  target.textContent = record.external_reply_target
+    ? `外语：${record.external_reply_target}`
+    : "暂无外语回复";
+  const reply = document.createElement("p");
+  reply.textContent = record.external_reply_chinese
+    ? `中文：${record.external_reply_chinese}`
+    : "暂无中文回复";
+  item.append(title, meta, understanding, target, reply);
+
+  // 只有管理员（本地填了管理员口令）才显示编辑/删除。
+  if (isAdminUser()) {
+    const actions = document.createElement("div");
+    actions.className = "archive-item-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "secondary";
+    editBtn.textContent = "编辑";
+    editBtn.addEventListener("click", () => enterArchiveEdit(item, record));
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "archive-delete";
+    delBtn.textContent = "删除";
+    delBtn.addEventListener("click", () => deleteArchiveRecord(record));
+    actions.append(editBtn, delBtn);
+    item.appendChild(actions);
+  }
+  return item;
+}
+
+function enterArchiveEdit(item, record) {
+  item.replaceChildren();
+  item.classList.add("editing");
+
+  const mkField = (labelText, value, rows) => {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const field = rows
+      ? document.createElement("textarea")
+      : document.createElement("input");
+    if (rows) field.rows = rows;
+    field.value = value || "";
+    item.append(label, field);
+    return field;
+  };
+
+  const nameField = mkField("场景名称", record.scene_name, 0);
+  const targetField = mkField("外语回复", record.external_reply_target, 4);
+  const chineseField = mkField("中文回复", record.external_reply_chinese, 4);
+  const notesField = mkField("运营备注", record.notes, 2);
+
+  const actions = document.createElement("div");
+  actions.className = "archive-item-actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "primary";
+  saveBtn.textContent = "保存修改";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "secondary";
+  cancelBtn.textContent = "取消";
+  cancelBtn.addEventListener("click", () =>
+    item.replaceWith(buildArchiveItem(record))
+  );
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "保存中…";
+    try {
+      await saveArchiveEdit(record, {
+        scene_name: nameField.value.trim() || record.scene_name,
+        external_reply_target: targetField.value.trim(),
+        external_reply_chinese: chineseField.value.trim(),
+        notes: notesField.value.trim()
+      });
+      await loadArchive(archiveSearch.value.trim());
+    } catch (error) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "保存修改";
+      const tip = document.createElement("p");
+      tip.className = "request-error";
+      tip.textContent = error.message;
+      item.appendChild(tip);
+    }
+  });
+  actions.append(saveBtn, cancelBtn);
+  item.appendChild(actions);
+}
+
+// 编辑时保留未改动的字段，带管理员口令提交（沿用同一 id 即为更新）。
+async function saveArchiveEdit(record, changes) {
+  const response = await fetch(`${API_BASE}/api/archive`, {
+    method: "POST",
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      id: record.id,
+      status: record.status,
+      product_id: record.product_id,
+      stage: record.stage,
+      trigger_examples: record.trigger_examples,
+      correct_understanding: record.correct_understanding,
+      internal_guidance: record.internal_guidance,
+      required_variables: record.required_variables,
+      ...changes
+    })
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(
+      body.code === "FORBIDDEN"
+        ? "没有编辑权限，请确认管理员口令填写正确。"
+        : body.error || "保存修改失败。"
+    );
+  }
+}
+
+async function deleteArchiveRecord(record) {
+  if (!window.confirm(`确定删除话术「${record.scene_name}」？此操作不可撤销。`)) {
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/archive/delete`, {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ id: record.id })
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        body.code === "FORBIDDEN"
+          ? "没有删除权限，请确认管理员口令填写正确。"
+          : body.error || "删除失败。"
+      );
+    }
+    await loadArchive(archiveSearch.value.trim());
+  } catch (error) {
+    errorBox.textContent = error.message;
+    errorBox.classList.remove("hidden");
   }
 }
 
@@ -947,25 +1095,31 @@ document.querySelectorAll("[data-copy-value]").forEach((button) => {
 // 服务器设置：填本机或团队 VPS 地址 + 团队口令，保存到 chrome.storage.local。
 const serverAddressInput = document.getElementById("server-address");
 const serverTokenInput = document.getElementById("server-token");
+const serverAdminInput = document.getElementById("server-admin");
 const saveServerButton = document.getElementById("save-server");
 const serverSettingsStatus = document.getElementById("server-settings-status");
 
 function fillServerSettings() {
   if (serverAddressInput) serverAddressInput.value = API_BASE;
   if (serverTokenInput) serverTokenInput.value = API_TOKEN;
+  if (serverAdminInput) serverAdminInput.value = API_ADMIN;
 }
 
 if (saveServerButton) {
   saveServerButton.addEventListener("click", async () => {
     const apiBase = serverAddressInput.value.trim().replace(/\/+$/, "");
     const token = serverTokenInput.value.trim();
+    const adminToken = serverAdminInput ? serverAdminInput.value.trim() : "";
     if (!apiBase) {
       serverAddressInput.focus();
       return;
     }
     API_BASE = apiBase;
     API_TOKEN = token;
-    await chrome.storage.local.set({ kolConfig: { apiBase, token } });
+    API_ADMIN = adminToken;
+    await chrome.storage.local.set({
+      kolConfig: { apiBase, token, adminToken }
+    });
     serverSettingsStatus.textContent = "已保存，正在重新连接服务……";
     serverSettingsStatus.classList.remove("hidden");
     await checkService();

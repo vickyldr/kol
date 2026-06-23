@@ -128,6 +128,11 @@ button { border: 0; border-radius: 10px; cursor: pointer; font: 700 12px/1 syste
 .archive-item h3 { margin: 0 0 5px; font-size: 13px; }
 .archive-item p { margin: 4px 0; color: #5c6475; font-size: 11px; line-height: 1.5; }
 .archive-meta { color: #766ccf !important; }
+.archive-item-actions { display: flex; gap: 8px; margin-top: 9px; }
+.archive-item-actions button { min-height: 34px; padding: 0 14px; }
+.archive-delete { color: #b42318; background: #fdecea; }
+.archive-item.editing label { display: block; margin-top: 8px; }
+.archive-item.editing input, .archive-item.editing textarea { background: #fff; margin-bottom: 4px; }
 dialog { width: min(360px, calc(100vw - 28px)); padding: 0; border: 0; border-radius: 16px; box-shadow: 0 22px 70px rgba(25,30,55,.25); }
 dialog::backdrop { background: rgba(20,24,36,.4); }
 #save-form { padding: 18px; }

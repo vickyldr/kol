@@ -7,6 +7,8 @@ const PORT = Number(process.env.KOL_ASSISTANT_PORT || 3210);
 const MODEL = process.env.DASHSCOPE_MODEL || "qwen-flash";
 // 团队口令：部署到 VPS 给团队用时设置，未设置则为本机单人模式（不校验）。
 const AUTH_TOKEN = process.env.KOL_ASSISTANT_TOKEN || "";
+// 管理员口令：设置后，只有带正确管理员口令的请求才能编辑/删除已有话术。
+const ADMIN_TOKEN = process.env.KOL_ASSISTANT_ADMIN_TOKEN || "";
 const ROOT = __dirname;
 const KNOWLEDGE_PATH = path.join(ROOT, "data", "knowledge-base.json");
 const PRODUCTS_PATH = path.join(ROOT, "data", "products.json");
@@ -25,7 +27,7 @@ function json(res, status, body) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, X-KOL-Token",
+    "Access-Control-Allow-Headers": "Content-Type, X-KOL-Token, X-KOL-Admin",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
   });
   res.end(JSON.stringify(body));
@@ -520,6 +522,24 @@ function archiveRecord(payload) {
   return record;
 }
 
+function archiveHasId(id) {
+  return loadJson(ARCHIVE_PATH, []).some((record) => record.id === id);
+}
+
+function deleteRecord(id) {
+  const records = loadJson(ARCHIVE_PATH, []);
+  const next = records.filter((record) => record.id !== id);
+  saveJson(ARCHIVE_PATH, next);
+  return { deleted: records.length - next.length };
+}
+
+// 没设置管理员口令时（本机单人模式）视为管理员，保持旧行为；
+// 团队部署设置了 KOL_ASSISTANT_ADMIN_TOKEN 后，编辑/删除已有话术需带正确管理员口令。
+function isAdmin(req) {
+  if (!ADMIN_TOKEN) return true;
+  return req.headers["x-kol-admin"] === ADMIN_TOKEN;
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") return json(res, 204, {});
 
@@ -568,7 +588,28 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && req.url === "/api/archive") {
       const payload = await readBody(req);
+      // 编辑已存在的话术需要管理员；新增不需要。
+      if (payload.id && archiveHasId(payload.id) && !isAdmin(req)) {
+        return json(res, 403, {
+          error: "只有管理员可以编辑已保存的话术。",
+          code: "FORBIDDEN"
+        });
+      }
       return json(res, 200, archiveRecord(payload));
+    }
+
+    if (req.method === "POST" && req.url === "/api/archive/delete") {
+      if (!isAdmin(req)) {
+        return json(res, 403, {
+          error: "只有管理员可以删除话术。",
+          code: "FORBIDDEN"
+        });
+      }
+      const payload = await readBody(req);
+      if (!String(payload.id || "").trim()) {
+        return json(res, 400, { error: "缺少要删除的话术 id。" });
+      }
+      return json(res, 200, deleteRecord(payload.id));
     }
 
     if (req.method === "POST" && req.url === "/api/archive/export") {

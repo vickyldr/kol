@@ -21,7 +21,8 @@ echo "Node 版本：$(node -v)"
 
 echo "== 2/4 填写配置 =="
 read -rp "请粘贴阿里云百炼 API Key（sk- 开头）: " DASH_KEY
-read -rp "请设置一个团队口令（同事插件里要填一模一样的，建议 16 位以上随机字符）: " TOKEN
+read -rp "请设置【团队口令】（每个同事插件里都填这个，建议 16 位以上随机字符）: " TOKEN
+read -rp "请设置【管理员口令】（只有你自己填，用来编辑/删除话术，要和团队口令不同）: " ADMIN_TOKEN
 PORT="${KOL_ASSISTANT_PORT:-3210}"
 
 if [ -z "$DASH_KEY" ] || [ -z "$TOKEN" ]; then
@@ -43,6 +44,7 @@ Environment=KOL_ASSISTANT_HOST=0.0.0.0
 Environment=KOL_ASSISTANT_PORT=$PORT
 Environment=DASHSCOPE_API_KEY=$DASH_KEY
 Environment=KOL_ASSISTANT_TOKEN=$TOKEN
+Environment=KOL_ASSISTANT_ADMIN_TOKEN=$ADMIN_TOKEN
 ExecStart=$(command -v node) $DIR/server.js
 Restart=always
 RestartSec=3
