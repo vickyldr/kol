@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # KOL 双语沟通助手 —— 腾讯云轻量 / 任意 Ubuntu VPS 一键部署脚本
-# 用法：把本目录（含 server.js 和 data/）上传到 VPS 后，在本目录运行：bash setup.sh
+# 既支持「上传 zip」模式，也支持「git clone」模式（推荐，后续可一键更新）。
 set -e
 
-DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR"
-
-if [ ! -f "$DIR/server.js" ]; then
-  echo "❌ 没找到 server.js。请在包含 server.js 和 data/ 的目录里运行本脚本。"
+# 自动定位 server.js：脚本同级（zip 包）或上一级（git 仓库的 vps/ 子目录）。
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/server.js" ]; then
+  APP_DIR="$SCRIPT_DIR"
+elif [ -f "$SCRIPT_DIR/../server.js" ]; then
+  APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+  echo "❌ 没找到 server.js。请在包含 server.js 的目录、或其 vps/ 子目录里运行本脚本。"
   exit 1
 fi
+cd "$APP_DIR"
 
 echo "== 1/4 检查 Node.js =="
 if ! command -v node >/dev/null 2>&1 || [ "$(node -v | sed 's/v\([0-9]*\).*/\1/')" -lt 18 ]; then
@@ -35,12 +39,12 @@ echo "== 3/4 准备数据目录 + 写入开机自启服务 =="
 DATA_DIR="$HOME/kol-data"
 mkdir -p "$DATA_DIR"
 # 首次部署时把内置默认资料拷过去；已存在则保留，绝不覆盖你的数据。
-if [ ! -f "$DATA_DIR/products.json" ] && [ -f "$DIR/data/products.json" ]; then
-  cp "$DIR/data/products.json" "$DATA_DIR/"
+if [ ! -f "$DATA_DIR/products.json" ] && [ -f "$APP_DIR/data/products.json" ]; then
+  cp "$APP_DIR/data/products.json" "$DATA_DIR/"
 fi
 if [ ! -f "$DATA_DIR/scenario-archive.json" ]; then
-  if [ -f "$DIR/data/scenario-archive.json" ]; then
-    cp "$DIR/data/scenario-archive.json" "$DATA_DIR/"
+  if [ -f "$APP_DIR/data/scenario-archive.json" ]; then
+    cp "$APP_DIR/data/scenario-archive.json" "$DATA_DIR/"
   else
     echo "[]" > "$DATA_DIR/scenario-archive.json"
   fi
@@ -54,14 +58,14 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$DIR
+WorkingDirectory=$APP_DIR
 Environment=KOL_ASSISTANT_HOST=0.0.0.0
 Environment=KOL_ASSISTANT_PORT=$PORT
 Environment=DASHSCOPE_API_KEY=$DASH_KEY
 Environment=KOL_ASSISTANT_TOKEN=$TOKEN
 Environment=KOL_ASSISTANT_ADMIN_TOKEN=$ADMIN_TOKEN
 Environment=KOL_DATA_DIR=$DATA_DIR
-ExecStart=$(command -v node) $DIR/server.js
+ExecStart=$(command -v node) $APP_DIR/server.js
 Restart=always
 RestartSec=3
 
@@ -75,6 +79,26 @@ sudo systemctl restart kol-assistant
 
 # 顺手放行系统自带防火墙（如果开着）。注意：腾讯云控制台的「防火墙」要单独开！
 sudo ufw allow "$PORT"/tcp >/dev/null 2>&1 || true
+
+# 如果代码是 git 克隆来的，生成一键更新脚本：以后更新只跑 bash ~/kol-update.sh
+REPO_DIR="$(git -C "$APP_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$REPO_DIR" ]; then
+  cat > "$HOME/kol-update.sh" <<UPD
+#!/usr/bin/env bash
+cd "$REPO_DIR" || exit 1
+echo "拉取最新代码..."
+before=\$(git rev-parse HEAD)
+git pull
+after=\$(git rev-parse HEAD)
+if [ "\$before" = "\$after" ]; then
+  echo "已是最新，无需重启。"
+else
+  sudo systemctl restart kol-assistant
+  echo "✅ 已更新并重启。"
+fi
+UPD
+  chmod +x "$HOME/kol-update.sh"
+fi
 
 echo "== 4/4 自检 =="
 sleep 2
@@ -95,4 +119,8 @@ echo ""
 echo "常用命令："
 echo "  重启服务： sudo systemctl restart kol-assistant"
 echo "  看日志：   sudo journalctl -u kol-assistant -f"
-echo "  改 Key/口令后重新部署： 重新 bash setup.sh"
+if [ -n "$REPO_DIR" ]; then
+  echo "  以后一键更新： bash ~/kol-update.sh"
+else
+  echo "  改 Key/口令后重新部署： 重新 bash setup.sh"
+fi
