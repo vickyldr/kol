@@ -72,7 +72,7 @@
     "id": "pb_006"
   },
   {
-    "product": "通用",
+    "product": "rythmix",
     "stage": "再合作",
     "name": "画饼长期合作",
     "variables": [],
@@ -219,7 +219,7 @@
     "id": "pb_019"
   },
   {
-    "product": "通用",
+    "product": "recco",
     "stage": "发布付款",
     "name": "好评",
     "variables": [],
@@ -234,7 +234,7 @@
     "id": "pb_020"
   },
   {
-    "product": "通用",
+    "product": "recco",
     "stage": "再合作",
     "name": "长期",
     "variables": [
@@ -364,7 +364,7 @@
     "id": "pb_027"
   },
   {
-    "product": "通用",
+    "product": "recco",
     "stage": "发布付款",
     "name": "支付相关的疑问",
     "variables": [],
@@ -626,7 +626,7 @@
     "id": "pb_044"
   },
   {
-    "product": "通用",
+    "product": "recco",
     "stage": "发布付款",
     "name": "支付",
     "variables": [],
