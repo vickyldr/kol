@@ -28,12 +28,36 @@ const targetLanguage = document.getElementById("target-language");
 const generateTemplateButton = document.getElementById("generate-template");
 const templateStatus = document.getElementById("template-status");
 
+// 板块切换 + 主动发板块（B）相关元素
+const tabReactive = document.getElementById("tab-reactive");
+const tabProactive = document.getElementById("tab-proactive");
+const panelReactive = document.getElementById("panel-reactive");
+const panelProactive = document.getElementById("panel-proactive");
+const freeIntentInput = document.getElementById("free-intent");
+const generateFreeButton = document.getElementById("generate-free");
+const freeStatus = document.getElementById("free-status");
+const resultPro = document.getElementById("result-pro");
+const replyTargetProInput = document.getElementById("reply-target-pro");
+const replyChineseProInput = document.getElementById("reply-zh-pro");
+const translateProButton = document.getElementById("translate-pro");
+
 let serviceOnline = false;
 let waitTimer = null;
 let lastAnalysis = null;
 let archiveSearchTimer = null;
 let quickTemplates = [];
 let selectedTemplate = null;
+let lastProScene = "";
+let lastProCategory = "主动话术";
+let pendingSave = null;
+
+function switchMode(mode) {
+  const reactive = mode !== "proactive";
+  tabReactive.classList.toggle("active", reactive);
+  tabProactive.classList.toggle("active", !reactive);
+  panelReactive.classList.toggle("hidden", !reactive);
+  panelProactive.classList.toggle("hidden", reactive);
+}
 
 async function loadPendingMessage() {
   const stored = await chrome.storage.session.get([
@@ -42,6 +66,7 @@ async function loadPendingMessage() {
   ]);
   if (stored.pendingMessage) {
     messageInput.value = stored.pendingMessage;
+    switchMode("reactive");
     await chrome.storage.session.remove("pendingMessage");
   }
   if (stored.selectedProduct) productSelect.value = stored.selectedProduct;
@@ -172,6 +197,27 @@ async function loadQuickTemplates() {
   }
 }
 
+// 主动发板块（B）的统一结果渲染：外语 + 中文对照 + 待填变量。
+function renderProactiveReply({ target, chinese, required, sceneName, category }) {
+  replyTargetProInput.value = target || "";
+  replyChineseProInput.value = chinese || "";
+  lastProScene = sceneName || "";
+  lastProCategory = category || "主动话术";
+
+  const missingCard = document.getElementById("missing-card-pro");
+  const missingList = document.getElementById("missing-information-pro");
+  missingList.replaceChildren();
+  for (const item of required || []) {
+    const li = document.createElement("li");
+    li.textContent = item;
+    missingList.appendChild(li);
+  }
+  missingCard.classList.toggle("hidden", !(required || []).length);
+
+  resultPro.classList.remove("hidden");
+  resultPro.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function generateQuickTemplate() {
   if (!selectedTemplate || !serviceOnline) return;
   const variables = {};
@@ -203,40 +249,66 @@ async function generateQuickTemplate() {
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "话术生成失败");
 
-    const generatedAnalysis = {
-      detected_language: targetLanguage.value,
-      literal_chinese: "",
-      implied_meaning: "主动发起的快捷话术",
-      implication_confidence: "high",
-      stage: selectedTemplate.category,
-      intent: selectedTemplate.name,
-      matched_source: selectedTemplate.name,
-      match_type: "exact",
-      reply_target: body.reply_target || "",
-      reply_chinese: body.reply_chinese || "",
-      alternative_target: "",
-      alternative_chinese: "",
-      required_variables: body.required_variables || [],
-      internal_guidance: {
-        level: "info",
-        explanation: "由主动话术快捷库生成，请发送前检查变量和产品信息。",
-        question_for_tl: "",
-        temporary_reply_target: "",
-        temporary_reply_chinese: "",
-        operator_reminders: []
-      },
-      mentioned_items: [],
-      risk_warning: "请确认价格、日期、数量、平台和授权条件没有遗漏。"
-    };
-    renderAnalysis(generatedAnalysis);
-    templateStatus.textContent = "已生成，可继续编辑或保存为话术。";
-    result.scrollIntoView({ behavior: "smooth", block: "start" });
+    renderProactiveReply({
+      target: body.reply_target || "",
+      chinese: body.reply_chinese || "",
+      required: body.required_variables || [],
+      sceneName: selectedTemplate.name,
+      category: selectedTemplate.category
+    });
+    templateStatus.textContent = "已生成，可核对、编辑或保存为话术。";
   } catch (error) {
     templateStatus.textContent =
       error.name === "TimeoutError" ? "生成超时，请重试。" : error.message;
   } finally {
     generateTemplateButton.disabled = false;
     generateTemplateButton.textContent = originalText;
+  }
+}
+
+// 入口二：自由输入中文意图 → 润色生成双语（复用 /api/rewrite）。
+async function generateFreeReply() {
+  const intent = freeIntentInput.value.trim();
+  if (!intent) {
+    freeIntentInput.focus();
+    return;
+  }
+  if (!serviceOnline) {
+    freeStatus.textContent = "千问服务尚未连接。";
+    freeStatus.classList.remove("hidden");
+    return;
+  }
+
+  generateFreeButton.disabled = true;
+  const originalText = generateFreeButton.textContent;
+  generateFreeButton.textContent = "正在生成双语…";
+  freeStatus.textContent = `正在用${targetLanguage.value}润色你的话……`;
+  freeStatus.classList.remove("hidden");
+
+  try {
+    const body = await postRewrite({
+      direction: "chinese_to_target",
+      message: "",
+      context: "",
+      productId: productSelect.value,
+      replyLanguage: targetLanguage.value,
+      replyTarget: "",
+      replyChinese: intent
+    });
+    renderProactiveReply({
+      target: body.reply_target || "",
+      chinese: body.reply_chinese || "",
+      required: [],
+      sceneName: "自由主动话术",
+      category: "主动话术"
+    });
+    freeStatus.textContent = "已生成，可核对、编辑或保存为话术。";
+  } catch (error) {
+    freeStatus.textContent =
+      error.name === "TimeoutError" ? "生成超时，请重试。" : error.message;
+  } finally {
+    generateFreeButton.disabled = false;
+    generateFreeButton.textContent = originalText;
   }
 }
 
@@ -380,8 +452,60 @@ async function loadArchive(query = "") {
   renderArchive(records);
 }
 
+// 收集板块 A（红人来消息）当前要保存的内容。
+function reactiveSaveCtx() {
+  return {
+    productId: productSelect.value,
+    target: replyTargetInput.value.trim(),
+    chinese: replyChineseInput.value.trim(),
+    sceneName: lastAnalysis
+      ? lastAnalysis.matched_source === "新场景"
+        ? lastAnalysis.intent
+        : lastAnalysis.matched_source || ""
+      : "",
+    stage: lastAnalysis?.stage || "",
+    trigger: messageInput.value.trim(),
+    understanding: lastAnalysis
+      ? [lastAnalysis.literal_chinese, lastAnalysis.implied_meaning]
+          .filter(Boolean)
+          .join("；")
+      : "",
+    internal_guidance: lastAnalysis?.internal_guidance || {},
+    required_variables: lastAnalysis?.required_variables || []
+  };
+}
+
+// 收集板块 B（我主动发）当前要保存的内容。
+function proactiveSaveCtx() {
+  return {
+    productId: productSelect.value,
+    target: replyTargetProInput.value.trim(),
+    chinese: replyChineseProInput.value.trim(),
+    sceneName: lastProScene || "",
+    stage: lastProCategory || "主动话术",
+    trigger: "",
+    understanding: "",
+    internal_guidance: {},
+    required_variables: []
+  };
+}
+
+function openSaveDialog(ctx) {
+  if (!ctx || (!ctx.target && !ctx.chinese)) {
+    errorBox.textContent = "请先生成或填写一条回复，再保存为话术。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  pendingSave = ctx;
+  document.getElementById("scene-name").value = ctx.sceneName || "";
+  document.getElementById("scene-notes").value = "";
+  document.getElementById("preview-target").textContent = ctx.target || "—";
+  document.getElementById("preview-chinese").textContent = ctx.chinese || "—";
+  saveDialog.showModal();
+}
+
 async function saveCurrentScenario() {
-  if (!lastAnalysis) return;
+  if (!pendingSave) return;
   const sceneName = document.getElementById("scene-name").value.trim();
   if (!sceneName) return;
 
@@ -389,20 +513,15 @@ async function saveCurrentScenario() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      product_id: productSelect.value,
+      product_id: pendingSave.productId,
       scene_name: sceneName,
-      stage: lastAnalysis.stage,
-      trigger_examples: [messageInput.value.trim()],
-      correct_understanding: [
-        lastAnalysis.literal_chinese,
-        lastAnalysis.implied_meaning
-      ]
-        .filter(Boolean)
-        .join("；"),
-      external_reply_target: replyTargetInput.value.trim(),
-      external_reply_chinese: replyChineseInput.value.trim(),
-      internal_guidance: lastAnalysis.internal_guidance,
-      required_variables: lastAnalysis.required_variables,
+      stage: pendingSave.stage,
+      trigger_examples: pendingSave.trigger ? [pendingSave.trigger] : [],
+      correct_understanding: pendingSave.understanding,
+      external_reply_target: pendingSave.target,
+      external_reply_chinese: pendingSave.chinese,
+      internal_guidance: pendingSave.internal_guidance,
+      required_variables: pendingSave.required_variables,
       notes: document.getElementById("scene-notes").value.trim()
     })
   });
@@ -413,6 +532,19 @@ async function saveCurrentScenario() {
   await loadArchive();
 }
 
+async function postRewrite(payload) {
+  const response = await fetch(`${API_BASE}/api/rewrite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(65000)
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "双语回复生成失败。");
+  return body;
+}
+
+// 板块 A 的改写：中文意图→双语，或外语→中文校对。
 async function rewriteReply(direction) {
   if (!serviceOnline) {
     errorBox.textContent = "千问服务尚未连接。";
@@ -431,24 +563,17 @@ async function rewriteReply(direction) {
   errorBox.classList.add("hidden");
 
   try {
-    const response = await fetch(`${API_BASE}/api/rewrite`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        direction,
-        message: messageInput.value.trim(),
-        context: contextInput.value.trim(),
-        operatorGoal: operatorGoalInput.value.trim(),
-        productId: productSelect.value,
-        detectedLanguage: lastAnalysis?.detected_language || "",
-        replyLanguage: replyLanguageSelect?.value || "",
-        replyTarget: replyTargetInput.value.trim(),
-        replyChinese: replyChineseInput.value.trim()
-      }),
-      signal: AbortSignal.timeout(65000)
+    const body = await postRewrite({
+      direction,
+      message: messageInput.value.trim(),
+      context: contextInput.value.trim(),
+      operatorGoal: operatorGoalInput.value.trim(),
+      productId: productSelect.value,
+      detectedLanguage: lastAnalysis?.detected_language || "",
+      replyLanguage: replyLanguageSelect?.value || "",
+      replyTarget: replyTargetInput.value.trim(),
+      replyChinese: replyChineseInput.value.trim()
     });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || "双语回复生成失败。");
     replyTargetInput.value = body.reply_target || replyTargetInput.value;
     replyChineseInput.value = body.reply_chinese || replyChineseInput.value;
 
@@ -463,6 +588,42 @@ async function rewriteReply(direction) {
   } finally {
     button.disabled = false;
     button.textContent = originalText;
+  }
+}
+
+// 板块 B 的回译核对：外语→中文。
+async function translateProReply() {
+  if (!serviceOnline) {
+    freeStatus.textContent = "千问服务尚未连接。";
+    freeStatus.classList.remove("hidden");
+    return;
+  }
+  const target = replyTargetProInput.value.trim();
+  if (!target) {
+    replyTargetProInput.focus();
+    return;
+  }
+
+  const originalText = translateProButton.textContent;
+  translateProButton.disabled = true;
+  translateProButton.textContent = "正在回译…";
+
+  try {
+    const body = await postRewrite({
+      direction: "target_to_chinese",
+      message: "",
+      productId: productSelect.value,
+      replyTarget: target
+    });
+    replyChineseProInput.value =
+      body.reply_chinese || replyChineseProInput.value;
+  } catch (error) {
+    freeStatus.textContent =
+      error.name === "TimeoutError" ? "回译超时，请稍后重试。" : error.message;
+    freeStatus.classList.remove("hidden");
+  } finally {
+    translateProButton.disabled = false;
+    translateProButton.textContent = originalText;
   }
 }
 
@@ -659,8 +820,12 @@ async function askQwenDirectly() {
   }
 }
 
+tabReactive.addEventListener("click", () => switchMode("reactive"));
+tabProactive.addEventListener("click", () => switchMode("proactive"));
 document.getElementById("analyze").addEventListener("click", analyze);
 generateTemplateButton.addEventListener("click", generateQuickTemplate);
+generateFreeButton.addEventListener("click", generateFreeReply);
+translateProButton.addEventListener("click", translateProReply);
 templateCategorySelect.addEventListener("change", () => {
   renderTemplateButtons(templateCategorySelect.value);
 });
@@ -677,43 +842,19 @@ document
 document
   .getElementById("generate-from-chinese")
   .addEventListener("click", () => rewriteReply("chinese_to_target"));
-function openSaveDialog() {
-  if (!lastAnalysis) {
-    errorBox.textContent = "请先分析消息或生成一条回复，再保存为话术。";
-    errorBox.classList.remove("hidden");
-    return;
-  }
-  document.getElementById("scene-name").value =
-    lastAnalysis.matched_source === "新场景"
-      ? lastAnalysis.intent
-      : lastAnalysis.matched_source || "";
-  document.getElementById("scene-notes").value = "";
-  // 在弹窗里预览这次到底会存下什么，避免“鬼知道保存的是什么”。
-  document.getElementById("preview-target").textContent =
-    replyTargetInput.value.trim() || "—";
-  document.getElementById("preview-chinese").textContent =
-    replyChineseInput.value.trim() || "—";
-  saveDialog.showModal();
-}
-
 document
   .getElementById("save-scenario")
-  .addEventListener("click", openSaveDialog);
+  .addEventListener("click", () => openSaveDialog(reactiveSaveCtx()));
 document
   .querySelectorAll(".save-trigger")
-  .forEach((button) => button.addEventListener("click", openSaveDialog));
-document.getElementById("open-archive").addEventListener("click", async () => {
-  archivePanel.classList.toggle("hidden");
-  if (!archivePanel.classList.contains("hidden")) {
-    archivePanel.scrollIntoView({ behavior: "smooth", block: "start" });
-    try {
-      await loadArchive();
-    } catch (error) {
-      errorBox.textContent = error.message;
-      errorBox.classList.remove("hidden");
-    }
-  }
-});
+  .forEach((button) =>
+    button.addEventListener("click", () => openSaveDialog(reactiveSaveCtx()))
+  );
+document
+  .querySelectorAll(".save-trigger-pro")
+  .forEach((button) =>
+    button.addEventListener("click", () => openSaveDialog(proactiveSaveCtx()))
+  );
 document.getElementById("save-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -726,9 +867,17 @@ document.getElementById("save-form").addEventListener("submit", async (event) =>
 document.getElementById("cancel-save").addEventListener("click", () => {
   saveDialog.close();
 });
-document.getElementById("toggle-archive").addEventListener("click", async () => {
+document.getElementById("open-archive").addEventListener("click", async () => {
   archivePanel.classList.toggle("hidden");
-  if (!archivePanel.classList.contains("hidden")) await loadArchive();
+  if (!archivePanel.classList.contains("hidden")) {
+    archivePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    try {
+      await loadArchive();
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.classList.remove("hidden");
+    }
+  }
 });
 archiveSearch.addEventListener("input", () => {
   clearTimeout(archiveSearchTimer);
