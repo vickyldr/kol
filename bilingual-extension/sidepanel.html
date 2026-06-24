@@ -40,6 +40,20 @@
         </select>
       </div>
 
+      <section id="guide-card" class="guide-card hidden">
+        <div class="guide-head">
+          <strong>👋 新手指引 · 这工具怎么用</strong>
+          <button id="guide-dismiss" type="button">知道了</button>
+        </div>
+        <p class="guide-intro">顶部三个板块，按场景选：</p>
+        <ul class="guide-tabs">
+          <li><b>📥 红人来消息</b>：对方发消息来、你要回复时用。<br />粘贴红人消息 →（可选写一句「你想怎么回复」）→ 点「分析并建议回复」→ 复制外语回复发出。不满意用「让 AI 改这条」继续调。</li>
+          <li><b>📤 我主动发</b>：你主动去联系红人时用。<br />从话术库选现成话术、或在「我想说…」写一句中文，让 AI 润色成双语。</li>
+          <li><b>💬 问 AI</b>：像 ChatGPT 一样随便问。<br />翻译、砍价思路、合作流程、这句啥意思、这个红人值不值得合作……</li>
+        </ul>
+        <p class="guide-tip">顶部还有：<b>📚 话术库</b>（已存好的话术）、<b>📎 物料库</b>（logo / 教程图 / 链接）、<b>❓</b>（再看本指引）。<br />⚠️ 紫色「内部处理建议」是给你自己看的，<b>别发给红人</b>。</p>
+      </section>
+
       <nav class="mode-tabs">
         <button id="tab-reactive" class="mode-tab active" type="button" data-mode="reactive">📥 红人来消息</button>
         <button id="tab-proactive" class="mode-tab" type="button" data-mode="proactive">📤 我主动发</button>
@@ -48,18 +62,6 @@
 
       <!-- ===================== 板块 A：红人来消息 ===================== -->
       <section id="panel-reactive" class="mode-panel">
-        <section id="guide-card" class="guide-card hidden">
-          <div class="guide-head">
-            <strong>👋 新手 3 步上手</strong>
-            <button id="guide-dismiss" type="button">知道了</button>
-          </div>
-          <ol>
-            <li>把红人消息<b>粘贴</b>到下面（或在 IG 选中消息后点「读取当前选中文字」）。</li>
-            <li>想引导语气，可在「你想怎么回复」写一句；不写也行，AI 会自己判断。</li>
-            <li>点「<b>分析并建议回复</b>」→ 复制「建议外语回复」发给红人。</li>
-          </ol>
-          <p class="guide-tip">回复不满意？在「让 AI 改这条」写一句继续调。<b>紫色「内部处理建议」是给你自己看的，别发给红人。</b><br />要主动发消息、或用现成话术，点上方「📤 我主动发」「📖 从话术库选」。顶部「❓」可随时再看本指引。</p>
-        </section>
         <section class="input-card">
           <label for="message">红人的消息</label>
           <textarea id="message" rows="6" placeholder="选中 Instagram 消息后打开插件，或直接粘贴到这里……"></textarea>

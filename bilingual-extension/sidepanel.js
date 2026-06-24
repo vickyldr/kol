@@ -2025,7 +2025,6 @@ document.getElementById("guide-dismiss").addEventListener("click", async () => {
   }
 });
 document.getElementById("open-guide").addEventListener("click", () => {
-  switchMode("reactive");
   guideCard.classList.remove("hidden");
   guideCard.scrollIntoView({ behavior: "smooth", block: "start" });
 });
