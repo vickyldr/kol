@@ -94,8 +94,9 @@ button { border: 0; border-radius: 10px; cursor: pointer; font: 700 12px/1 syste
 .playbook-head { display: flex; align-items: center; justify-content: space-between; }
 .playbook-head h2 { margin: 0; font-size: 18px; }
 .playbook-head button { padding: 6px 12px; }
-.playbook-filters { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin: 12px 0; }
-.playbook-filters select, .playbook-filters input { margin: 0; }
+.playbook-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 8px; }
+.playbook-filters select { margin: 0; }
+.playbook-search { margin: 0 0 12px; }
 .playbook-langs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .lang-chip { padding: 6px 11px; color: #5b50c6; background: #efedff; border-radius: 999px; }
 .lang-chip.active { color: #fff; background: linear-gradient(135deg, #6d5dfc, #3f74e8); }

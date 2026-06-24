@@ -74,9 +74,18 @@ const translateProButton = document.getElementById("translate-pro");
 
 // 选话术（多语言话术库）相关元素
 const playbookDialog = document.getElementById("playbook-dialog");
+const playbookProduct = document.getElementById("playbook-product");
 const playbookStage = document.getElementById("playbook-stage");
 const playbookSearch = document.getElementById("playbook-search");
 const playbookList = document.getElementById("playbook-list");
+const PRODUCT_LABEL = {
+  rythmix: "Rythmix",
+  recco: "Recco",
+  vivavideo: "VivaVideo",
+  vivacut: "VivaCut",
+  aicatch: "AICatch",
+  通用: "通用（所有产品）"
+};
 
 let serviceOnline = false;
 let waitTimer = null;
@@ -361,6 +370,17 @@ async function checkService() {
   try {
     const response = await fetch(`${API_BASE}/health`);
     const health = await response.json();
+    // 验证团队口令是否正确（/health 不校验口令，需另探一个受保护接口）。
+    const probe = await fetch(`${API_BASE}/api/products`, {
+      headers: authHeaders()
+    });
+    if (probe.status === 401) {
+      serviceOnline = false;
+      statusButton.textContent = "口令不正确";
+      statusButton.className = "status offline";
+      statusButton.title = "团队口令与服务器不一致，请在「服务器设置」里更正";
+      return;
+    }
     serviceOnline = response.ok && health.ok;
     statusButton.textContent = health.ai_configured ? "千问已连接" : "待配置 Key";
     statusButton.className = `status ${health.ai_configured ? "online" : "offline"}`;
@@ -947,6 +967,21 @@ async function loadPlaybook() {
 
 function openPlaybookPicker(target) {
   playbookTarget = target;
+  // 产品筛选：默认“全部产品”，避免只看到通用话术。
+  const prods = [...new Set(playbook.map((e) => e.product))];
+  playbookProduct.replaceChildren();
+  const pAll = document.createElement("option");
+  pAll.value = "";
+  pAll.textContent = "全部产品";
+  playbookProduct.appendChild(pAll);
+  for (const p of prods) {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = PRODUCT_LABEL[p] || p;
+    playbookProduct.appendChild(o);
+  }
+  if (prods.includes(productSelect.value)) playbookProduct.value = productSelect.value;
+
   const stages = [...new Set(playbook.map((e) => e.stage))];
   playbookStage.replaceChildren();
   const all = document.createElement("option");
@@ -965,11 +1000,15 @@ function openPlaybookPicker(target) {
 }
 
 function renderPlaybookList() {
-  const product = productSelect.value;
+  const product = playbookProduct.value;
   const stage = playbookStage.value;
   const q = playbookSearch.value.trim().toLowerCase();
   const items = playbook.filter((e) => {
-    if (e.product !== "通用" && e.product !== product) return false;
+    // 选了具体产品时显示“该产品 + 通用”；选“通用”只看通用；不选则全部。
+    if (product === "通用" && e.product !== "通用") return false;
+    if (product && product !== "通用" && e.product !== product && e.product !== "通用") {
+      return false;
+    }
     if (stage && e.stage !== stage) return false;
     if (
       q &&
@@ -1321,6 +1360,7 @@ document
 document
   .getElementById("playbook-close")
   .addEventListener("click", () => playbookDialog.close());
+playbookProduct.addEventListener("change", renderPlaybookList);
 playbookStage.addEventListener("change", renderPlaybookList);
 playbookSearch.addEventListener("input", renderPlaybookList);
 templateCategorySelect.addEventListener("change", () => {
