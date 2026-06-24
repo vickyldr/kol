@@ -112,7 +112,11 @@ function parseJsonText(text) {
     .replace(/^```json\s*/i, "")
     .replace(/```$/i, "")
     .trim();
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error("AI 返回内容不完整或格式异常，请重试。");
+  }
 }
 
 function findProduct(productId) {
@@ -390,7 +394,7 @@ ${REPLY_STYLE}`;
     await callQwen({
       system: systemPrompt,
       user: userPrompt,
-      maxTokens: 1500,
+      maxTokens: 3000,
       temperature: 0.15
     })
   );
@@ -636,7 +640,7 @@ async function alignReply(payload) {
       reply_target: payload.replyTarget || "",
       reply_chinese: payload.replyChinese || ""
     }),
-    maxTokens: 1400,
+    maxTokens: 2000,
     temperature: 0
   });
   return {
