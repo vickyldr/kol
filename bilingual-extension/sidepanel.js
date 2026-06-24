@@ -711,7 +711,7 @@ async function saveCurrentScenario() {
 
   const response = await fetch(`${API_BASE}/api/archive`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       product_id: pendingSave.productId,
       scene_name: sceneName,
@@ -735,7 +735,7 @@ async function saveCurrentScenario() {
 async function postRewrite(payload) {
   const response = await fetch(`${API_BASE}/api/rewrite`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(65000)
   });
