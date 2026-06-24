@@ -39,9 +39,6 @@ const emptyState = document.getElementById("empty-state");
 const errorBox = document.getElementById("request-error");
 const analyzeButton = document.getElementById("analyze");
 const statusButton = document.getElementById("service-status");
-const askQuestionInput = document.getElementById("ask-question");
-const askButton = document.getElementById("ask-qwen");
-const askAnswer = document.getElementById("ask-answer");
 const replyTargetInput = document.getElementById("reply-target");
 const replyChineseInput = document.getElementById("reply-zh");
 const replyLanguageSelect = document.getElementById("reply-language");
@@ -813,10 +810,12 @@ async function refineReply() {
     return;
   }
   const button = document.getElementById("refine-reply");
+  const refineStatus = document.getElementById("refine-status");
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent = "正在修改…";
-  errorBox.classList.add("hidden");
+  refineStatus.classList.add("hidden");
+  refineStatus.classList.remove("error");
   try {
     const body = await postRewrite({
       direction: "refine",
@@ -836,10 +835,17 @@ async function refineReply() {
       lastAnalysis.reply_chinese = replyChineseInput.value;
     }
     refineInput.value = "";
+    refineStatus.textContent = "已按你的要求改好 ↑ 见上方「外语/中文回复」。";
+    refineStatus.classList.remove("hidden", "error");
+    // 把更新后的外语回复滚动到视野，避免“看不到生成”。
+    replyTargetInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    replyTargetInput.classList.add("flash");
+    setTimeout(() => replyTargetInput.classList.remove("flash"), 1200);
   } catch (error) {
-    errorBox.textContent =
+    refineStatus.textContent =
       error.name === "TimeoutError" ? "修改超时，请稍后重试。" : error.message;
-    errorBox.classList.remove("hidden");
+    refineStatus.classList.remove("hidden");
+    refineStatus.classList.add("error");
   } finally {
     button.disabled = false;
     button.textContent = originalText;
@@ -1684,49 +1690,6 @@ async function analyze() {
   }
 }
 
-async function askQwenDirectly() {
-  const question = askQuestionInput.value.trim();
-  if (!question) {
-    askQuestionInput.focus();
-    return;
-  }
-  if (!serviceOnline) {
-    askAnswer.textContent = "千问服务尚未连接。";
-    askAnswer.classList.remove("hidden");
-    return;
-  }
-
-  askButton.disabled = true;
-  askButton.textContent = "千问回答中…";
-  askAnswer.classList.add("hidden");
-  try {
-    const response = await fetch(`${API_BASE}/api/ask`, {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        question,
-        message: messageInput.value.trim(),
-        context: contextInput.value.trim(),
-        productId: productSelect.value,
-        analysis: lastAnalysis
-      }),
-      signal: AbortSignal.timeout(65000)
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || "千问回答失败。");
-    askAnswer.textContent = body.answer;
-  } catch (error) {
-    askAnswer.textContent =
-      error.name === "TimeoutError"
-        ? "回答超时，请稍后重试。"
-        : error.message;
-  } finally {
-    askAnswer.classList.remove("hidden");
-    askButton.disabled = false;
-    askButton.textContent = "发送问题";
-  }
-}
-
 tabReactive.addEventListener("click", () => switchMode("reactive"));
 tabProactive.addEventListener("click", () => switchMode("proactive"));
 document.getElementById("analyze").addEventListener("click", analyze);
@@ -1754,7 +1717,6 @@ templateSelect.addEventListener("change", () => {
   );
   if (template) selectQuickTemplate(template);
 });
-askButton.addEventListener("click", askQwenDirectly);
 document
   .getElementById("translate-to-chinese")
   .addEventListener("click", () => rewriteReply("target_to_chinese"));

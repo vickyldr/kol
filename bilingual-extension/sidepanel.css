@@ -34,6 +34,9 @@ h1 { margin: 0; font-size: 23px; line-height: 1.2; }
 .refine-card { border-color: #cfe3ff; background: linear-gradient(180deg,#fff,#f5f9ff); }
 .refine-card textarea { margin: 9px 0 8px; }
 .refine-card .editor-tool { width: 100%; min-height: 38px; }
+.refine-status { margin: 8px 0 0; font-size: 12px; color: #137344; font-weight: 700; line-height: 1.5; }
+.refine-status.error { color: #b42318; }
+.reply-editor.flash { border-color: #7769ea; box-shadow: 0 0 0 3px rgba(119,105,234,.28); }
 .status { padding: 7px 10px; border-radius: 999px; background: #e9e7ff; color: #5448c8; font-size: 11px; font-weight: 700; }
 .archive-entry { cursor: pointer; }
 .status.online { background: #e2f8ec; color: #137344; }

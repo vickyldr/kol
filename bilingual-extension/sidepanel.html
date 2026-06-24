@@ -137,7 +137,8 @@
             <span class="card-label">不满意？告诉 AI 怎么改</span>
             <textarea id="refine-input" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 主语翻反了，是对方让我发发票 / 别提价格"></textarea>
             <button id="refine-reply" class="editor-tool primary">让 AI 改这条回复</button>
-            <small class="editor-tip">会在当前外语回复的基础上按你说的改，可以反复改。</small>
+            <p id="refine-status" class="refine-status hidden"></p>
+            <small class="editor-tip">会在当前外语回复的基础上按你说的改，可以反复改；改好的会更新到上方「外语/中文回复」。</small>
           </article>
 
           <article id="internal-guidance" class="internal-card">
@@ -180,16 +181,6 @@
           <section class="archive-actions">
             <button id="save-scenario" class="primary">保存为确认话术</button>
           </section>
-        </section>
-
-        <section class="ask-card">
-          <div class="card-heading">
-            <span class="card-label">直接问千问</span>
-            <small>可纠错、追问原文或让它重写回复</small>
-          </div>
-          <textarea id="ask-question" rows="3" placeholder="例如：你是不是把主客体翻反了？对方到底让谁发送发票？"></textarea>
-          <button id="ask-qwen" class="primary ask-button">发送问题</button>
-          <p id="ask-answer" class="ask-answer hidden"></p>
         </section>
       </section>
 
