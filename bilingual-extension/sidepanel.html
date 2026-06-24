@@ -152,22 +152,6 @@
             <small class="editor-tip">忠实翻译＝照你写的一字不改翻；润色生成＝AI 加工成自然口语回复（会加问候收尾）。语言按上方「回复语言」。</small>
           </article>
 
-          <article class="card">
-            <div class="card-heading">
-              <span class="card-label">逐句对照（核对哪句翻错）</span>
-              <button id="align-reply" class="secondary" type="button">📑 生成逐句对照</button>
-            </div>
-            <div id="align-list" class="align-list"></div>
-          </article>
-
-          <article class="card refine-card">
-            <span class="card-label">不满意？告诉 AI 怎么改</span>
-            <textarea id="refine-input" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 主语翻反了，是对方让我发发票 / 别提价格"></textarea>
-            <button id="refine-reply" class="editor-tool primary">让 AI 改这条回复</button>
-            <p id="refine-status" class="refine-status hidden"></p>
-            <small class="editor-tip">会在当前外语回复的基础上按你说的改，可以反复改；改好的会更新到上方「外语/中文回复」。</small>
-          </article>
-
           <article id="internal-guidance" class="internal-card">
             <div class="internal-heading">
               <span id="internal-level">内部处理建议</span>
@@ -192,6 +176,25 @@
             <span>发送前风险</span>
             <p id="risk"></p>
           </article>
+
+          <details class="more-tools">
+            <summary>✏️ 逐句对照 / 让 AI 改这条（点开）</summary>
+            <article class="card">
+              <div class="card-heading">
+                <span class="card-label">逐句对照（核对哪句翻错）</span>
+                <button id="align-reply" class="secondary" type="button">📑 生成逐句对照</button>
+              </div>
+              <div id="align-list" class="align-list"></div>
+            </article>
+
+            <article class="card refine-card">
+              <span class="card-label">不满意？告诉 AI 怎么改</span>
+              <textarea id="refine-input" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 主语翻反了，是对方让我发发票 / 别提价格"></textarea>
+              <button id="refine-reply" class="editor-tool primary">让 AI 改这条回复</button>
+              <p id="refine-status" class="refine-status hidden"></p>
+              <small class="editor-tip">会在当前外语回复的基础上按你说的改，可以反复改；改好的会更新到上方「外语/中文回复」。</small>
+            </article>
+          </details>
 
           <details class="card alternatives">
             <summary>查看备选回复</summary>

@@ -63,6 +63,10 @@ h1 { margin: 0; font-size: 23px; line-height: 1.2; }
 .align-head:hover { background: transparent; }
 .align-head .align-target, .align-head .align-chinese { color: #6b7280; font-size: 11px; font-weight: 700; }
 .align-head:hover .align-chinese { color: #6b7280; background: transparent; box-shadow: none; }
+.more-tools > summary { cursor: pointer; padding: 11px 14px; border: 1px solid #dcd8ff; border-radius: 14px; background: #faf9ff; color: #5b50c6; font-size: 13px; font-weight: 700; }
+.more-tools[open] > summary { margin-bottom: 10px; }
+.more-tools > article { margin-top: 10px; }
+.more-tools > article:first-of-type { margin-top: 0; }
 .status { padding: 7px 10px; border-radius: 999px; background: #e9e7ff; color: #5448c8; font-size: 11px; font-weight: 700; }
 .archive-entry { cursor: pointer; }
 .status.online { background: #e2f8ec; color: #137344; }
