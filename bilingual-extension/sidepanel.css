@@ -23,6 +23,13 @@ h1 { margin: 0; font-size: 23px; line-height: 1.2; }
 .mode-tab { min-height: 40px; color: #6b6593; background: transparent; font-size: 13px; }
 .mode-tab.active { color: #4034a6; background: #fff; box-shadow: 0 4px 12px rgba(40,49,82,.1); }
 .mode-panel { display: grid; gap: 12px; }
+.guide-card { padding: 13px 14px; border: 1px solid #cfe0ff; border-radius: 14px; background: linear-gradient(180deg,#f3f8ff,#eef4ff); }
+.guide-head { display: flex; align-items: center; justify-content: space-between; }
+.guide-head strong { font-size: 14px; color: #2b4a7a; }
+.guide-head button { padding: 6px 11px; color: #fff; background: linear-gradient(135deg,#6d5dfc,#3f74e8); border-radius: 9px; }
+.guide-card ol { margin: 9px 0 0; padding-left: 20px; }
+.guide-card li { margin: 5px 0; font-size: 12.5px; line-height: 1.55; color: #2c3852; }
+.guide-tip { margin: 9px 0 0; padding-top: 9px; border-top: 1px dashed #c3d6f5; color: #4a5874; font-size: 11.5px; line-height: 1.6; }
 .proactive-language-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #dcd8ff; border-radius: 13px; background: #faf9ff; }
 .proactive-language-bar label { flex-shrink: 0; }
 .proactive-language-bar select { margin: 0; }

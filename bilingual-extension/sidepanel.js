@@ -1919,8 +1919,35 @@ if (saveServerButton) {
   });
 }
 
+// 新手指引：首次打开显示，点"知道了"永久收起，顶部"❓"可再调出。
+const guideCard = document.getElementById("guide-card");
+async function initGuide() {
+  try {
+    const { kolGuideDismissed } = await chrome.storage.local.get(
+      "kolGuideDismissed"
+    );
+    guideCard.classList.toggle("hidden", Boolean(kolGuideDismissed));
+  } catch {
+    guideCard.classList.remove("hidden");
+  }
+}
+document.getElementById("guide-dismiss").addEventListener("click", async () => {
+  guideCard.classList.add("hidden");
+  try {
+    await chrome.storage.local.set({ kolGuideDismissed: true });
+  } catch {
+    // 忽略存储失败。
+  }
+});
+document.getElementById("open-guide").addEventListener("click", () => {
+  switchMode("reactive");
+  guideCard.classList.remove("hidden");
+  guideCard.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
 loadConfig().then(() => {
   fillServerSettings();
   loadPendingMessage();
   checkService();
 });
+initGuide();

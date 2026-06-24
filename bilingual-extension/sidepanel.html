@@ -14,6 +14,7 @@
           <h1>双语沟通助手</h1>
         </div>
         <div class="header-actions">
+          <button id="open-guide" class="status archive-entry" title="新手怎么用">❓</button>
           <button id="open-archive" class="status archive-entry" title="查看已保存的话术库">📚 话术库</button>
           <button id="open-assets" class="status archive-entry" title="logo / 教程图 / 链接等物料">📎 物料库</button>
           <button id="service-status" class="status" title="点击重新检测">检测中</button>
@@ -46,6 +47,18 @@
 
       <!-- ===================== 板块 A：红人来消息 ===================== -->
       <section id="panel-reactive" class="mode-panel">
+        <section id="guide-card" class="guide-card hidden">
+          <div class="guide-head">
+            <strong>👋 新手 3 步上手</strong>
+            <button id="guide-dismiss" type="button">知道了</button>
+          </div>
+          <ol>
+            <li>把红人消息<b>粘贴</b>到下面（或在 IG 选中消息后点「读取当前选中文字」）。</li>
+            <li>想引导语气，可在「你想怎么回复」写一句；不写也行，AI 会自己判断。</li>
+            <li>点「<b>分析并建议回复</b>」→ 复制「建议外语回复」发给红人。</li>
+          </ol>
+          <p class="guide-tip">回复不满意？在「让 AI 改这条」写一句继续调。<b>紫色「内部处理建议」是给你自己看的，别发给红人。</b><br />要主动发消息、或用现成话术，点上方「📤 我主动发」「📖 从话术库选」。顶部「❓」可随时再看本指引。</p>
+        </section>
         <section class="input-card">
           <label for="message">红人的消息</label>
           <textarea id="message" rows="6" placeholder="选中 Instagram 消息后打开插件，或直接粘贴到这里……"></textarea>
