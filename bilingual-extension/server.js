@@ -212,6 +212,59 @@ async function callQwen({ system, user, maxTokens = 1200, temperature = 0.1 }) {
   return parseJsonText(body?.choices?.[0]?.message?.content);
 }
 
+// 通用多轮聊天：直接返回纯文本，不强制 JSON。
+async function chatQwen(messages, { maxTokens = 1200, temperature = 0.5 } = {}) {
+  const apiKey = process.env.DASHSCOPE_API_KEY;
+  if (!apiKey) {
+    const error = new Error("尚未配置阿里云百炼 API Key。");
+    error.code = "MISSING_DASHSCOPE_KEY";
+    throw error;
+  }
+  const response = await fetch(
+    "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages,
+        temperature,
+        max_tokens: maxTokens
+      }),
+      signal: AbortSignal.timeout(55000)
+    }
+  );
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body?.error?.message || `百炼请求失败：${response.status}`);
+  }
+  return String(body?.choices?.[0]?.message?.content || "").trim();
+}
+
+async function chatWithQwen(payload) {
+  const history = Array.isArray(payload.messages) ? payload.messages : [];
+  const system = `你是中国 KOL 运营团队的 AI 助手，名字叫小助手。运营会问你各种问题：
+红人消息的翻译和理解、谈判砍价思路、合作流程、某条话术怎么说、某个红人值不值得合作、
+某种语言/地区的习惯、写一段外语内容等等。请像一个懂行、靠谱的同事一样用简洁中文回答；
+需要外语时给出对应语言示例并附中文。
+不要编造价格、日期、授权期限、付款承诺、平台数据等必须由人确认的信息；不确定就说不确定、或建议问 TL。`;
+  const messages = [
+    { role: "system", content: system },
+    ...history
+      .slice(-20)
+      .map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: String(m.content || "")
+      }))
+      .filter((m) => m.content)
+  ];
+  const answer = await chatQwen(messages, { maxTokens: 1200, temperature: 0.5 });
+  return { answer };
+}
+
 async function analyzeWithQwen(payload) {
   const product = findProduct(payload.productId);
   const archiveRecords = loadJson(ARCHIVE_PATH, []).filter(
@@ -855,6 +908,14 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "请先有一条外语回复。" });
       }
       return json(res, 200, await alignReply(payload));
+    }
+
+    if (req.method === "POST" && req.url === "/api/chat") {
+      const payload = await readBody(req);
+      if (!Array.isArray(payload.messages) || !payload.messages.length) {
+        return json(res, 400, { error: "请先输入要问的内容。" });
+      }
+      return json(res, 200, await chatWithQwen(payload));
     }
 
     if (req.method === "POST" && req.url === "/api/generate-template") {

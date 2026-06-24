@@ -43,6 +43,7 @@
       <nav class="mode-tabs">
         <button id="tab-reactive" class="mode-tab active" type="button" data-mode="reactive">📥 红人来消息</button>
         <button id="tab-proactive" class="mode-tab" type="button" data-mode="proactive">📤 我主动发</button>
+        <button id="tab-chat" class="mode-tab" type="button" data-mode="chat">💬 问 AI</button>
       </nav>
 
       <!-- ===================== 板块 A：红人来消息 ===================== -->
@@ -291,6 +292,18 @@
 
           <p class="reply-hint">发送前请点「外语 → 中文回译核对」，确认外语意思没有出错。</p>
         </section>
+      </section>
+
+      <!-- ===================== 板块 C：问 AI ===================== -->
+      <section id="panel-chat" class="mode-panel hidden">
+        <div id="chat-messages" class="chat-messages">
+          <p class="chat-hint">问我任何问题：翻译、砍价思路、合作流程、某句话怎么说、某个红人值不值得合作……像聊天一样问就行。</p>
+        </div>
+        <textarea id="chat-input" rows="3" placeholder="例如：泰语里委婉拒绝涨价怎么说？这条红人消息是什么意思？"></textarea>
+        <div class="button-row">
+          <button id="chat-clear" class="secondary" type="button">清空</button>
+          <button id="chat-send" class="primary" type="button">发送</button>
+        </div>
       </section>
 
       <section id="assets-panel" class="archive-panel hidden">

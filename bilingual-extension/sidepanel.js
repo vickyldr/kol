@@ -59,8 +59,10 @@ const templateStatus = document.getElementById("template-status");
 // 板块切换 + 主动发板块（B）相关元素
 const tabReactive = document.getElementById("tab-reactive");
 const tabProactive = document.getElementById("tab-proactive");
+const tabChat = document.getElementById("tab-chat");
 const panelReactive = document.getElementById("panel-reactive");
 const panelProactive = document.getElementById("panel-proactive");
+const panelChat = document.getElementById("panel-chat");
 const freeIntentInput = document.getElementById("free-intent");
 const generateFreeButton = document.getElementById("generate-free");
 const freeStatus = document.getElementById("free-status");
@@ -104,11 +106,13 @@ let playbook = [];
 let playbookTarget = "reactive";
 
 function switchMode(mode) {
-  const reactive = mode !== "proactive";
-  tabReactive.classList.toggle("active", reactive);
-  tabProactive.classList.toggle("active", !reactive);
-  panelReactive.classList.toggle("hidden", !reactive);
-  panelProactive.classList.toggle("hidden", reactive);
+  if (!["reactive", "proactive", "chat"].includes(mode)) mode = "reactive";
+  tabReactive.classList.toggle("active", mode === "reactive");
+  tabProactive.classList.toggle("active", mode === "proactive");
+  tabChat.classList.toggle("active", mode === "chat");
+  panelReactive.classList.toggle("hidden", mode !== "reactive");
+  panelProactive.classList.toggle("hidden", mode !== "proactive");
+  panelChat.classList.toggle("hidden", mode !== "chat");
 }
 
 async function loadPendingMessage() {
@@ -1740,8 +1744,89 @@ async function analyze() {
   }
 }
 
+// ===================== 问 AI（通用聊天）=====================
+const chatMessages = document.getElementById("chat-messages");
+const chatInput = document.getElementById("chat-input");
+let chatHistory = [];
+
+function renderChat() {
+  chatMessages.replaceChildren();
+  if (!chatHistory.length) {
+    const hint = document.createElement("p");
+    hint.className = "chat-hint";
+    hint.textContent =
+      "问我任何问题：翻译、砍价思路、合作流程、某句话怎么说、某个红人值不值得合作……像聊天一样问就行。";
+    chatMessages.appendChild(hint);
+    return;
+  }
+  for (const m of chatHistory) {
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${m.role}`;
+    bubble.textContent = m.content;
+    chatMessages.appendChild(bubble);
+  }
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function sendChat() {
+  const text = chatInput.value.trim();
+  if (!text) {
+    chatInput.focus();
+    return;
+  }
+  if (!serviceOnline) {
+    chatHistory.push({ role: "assistant", content: "千问服务尚未连接。" });
+    renderChat();
+    return;
+  }
+  chatHistory.push({ role: "user", content: text });
+  chatInput.value = "";
+  renderChat();
+  const sendBtn = document.getElementById("chat-send");
+  sendBtn.disabled = true;
+  sendBtn.textContent = "思考中…";
+  const thinking = document.createElement("div");
+  thinking.className = "chat-bubble assistant";
+  thinking.textContent = "正在思考…";
+  chatMessages.appendChild(thinking);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  try {
+    const response = await fetch(`${API_BASE}/api/chat`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ messages: chatHistory }),
+      signal: AbortSignal.timeout(65000)
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "回答失败。");
+    chatHistory.push({ role: "assistant", content: body.answer });
+  } catch (error) {
+    chatHistory.push({
+      role: "assistant",
+      content:
+        error.name === "TimeoutError" ? "回答超时，请重试。" : error.message
+    });
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = "发送";
+    renderChat();
+  }
+}
+
 tabReactive.addEventListener("click", () => switchMode("reactive"));
 tabProactive.addEventListener("click", () => switchMode("proactive"));
+tabChat.addEventListener("click", () => switchMode("chat"));
+document.getElementById("chat-send").addEventListener("click", sendChat);
+document.getElementById("chat-clear").addEventListener("click", () => {
+  chatHistory = [];
+  renderChat();
+});
+chatInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendChat();
+  }
+});
 document.getElementById("analyze").addEventListener("click", analyze);
 generateTemplateButton.addEventListener("click", generateQuickTemplate);
 generateFreeButton.addEventListener("click", generateFreeReply);
