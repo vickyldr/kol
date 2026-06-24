@@ -62,3 +62,29 @@ chrome.runtime.onMessage.addListener((message, sender) => {
       console.warn("KOL Assistant message action failed:", error);
     });
 });
+
+// 网页内联翻译：由后台代发请求，绕过 HTTPS 页面对 HTTP 服务的混合内容拦截。
+async function handleTranslate(text) {
+  const { kolConfig } = await chrome.storage.local.get("kolConfig");
+  const base = kolConfig?.apiBase || "http://106.54.206.174:3210";
+  const token = kolConfig?.token || "";
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["X-KOL-Token"] = token;
+  const response = await fetch(`${base}/api/translate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text }),
+    signal: AbortSignal.timeout(30000)
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "翻译失败");
+  return body;
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "KOL_TRANSLATE") return;
+  handleTranslate(message.text)
+    .then(sendResponse)
+    .catch((error) => sendResponse({ error: error.message || "翻译失败" }));
+  return true; // 保持消息通道开启以异步响应
+});

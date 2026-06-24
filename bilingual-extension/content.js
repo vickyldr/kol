@@ -146,20 +146,15 @@ async function requestTranslation(text) {
   if (translatedTexts.has(text)) return translatedTexts.get(text);
   if (pendingTexts.has(text)) return pendingTexts.get(text);
 
-  const headers = { "Content-Type": "application/json" };
-  if (API_TOKEN) headers["X-KOL-Token"] = API_TOKEN;
-  const promise = fetch(`${API_BASE}/api/translate`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ text }),
-    signal: AbortSignal.timeout(30000)
-  })
-    .then(async (response) => {
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "翻译失败");
+  // 通过插件后台发起请求：Instagram 是 HTTPS 页面，直接请求 HTTP 的 VPS 会被
+  // 浏览器“混合内容”策略拦截；后台 service worker 不受此限制。
+  const promise = chrome.runtime
+    .sendMessage({ type: "KOL_TRANSLATE", text })
+    .then((res) => {
+      if (!res || res.error) throw new Error(res?.error || "翻译失败");
       const translated = {
-        translation: body.translation,
-        termNotes: body.term_notes || []
+        translation: res.translation,
+        termNotes: res.term_notes || []
       };
       translatedTexts.set(text, translated);
       return translated;
