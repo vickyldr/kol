@@ -30,6 +30,10 @@ h1 { margin: 0; font-size: 23px; line-height: 1.2; }
 .free-intent-card h2 { margin: 4px 0 8px; font-size: 16px; }
 .free-intent-card button { width: 100%; min-height: 40px; }
 .reply-hint { margin: 4px 2px 0; color: #81879a; font-size: 11px; line-height: 1.5; }
+.goal-label { display: block; margin-top: 2px; }
+.refine-card { border-color: #cfe3ff; background: linear-gradient(180deg,#fff,#f5f9ff); }
+.refine-card textarea { margin: 9px 0 8px; }
+.refine-card .editor-tool { width: 100%; min-height: 38px; }
 .status { padding: 7px 10px; border-radius: 999px; background: #e9e7ff; color: #5448c8; font-size: 11px; font-weight: 700; }
 .archive-entry { cursor: pointer; }
 .status.online { background: #e2f8ec; color: #137344; }

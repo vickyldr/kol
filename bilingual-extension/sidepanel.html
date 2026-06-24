@@ -48,12 +48,12 @@
         <section class="input-card">
           <label for="message">红人的消息</label>
           <textarea id="message" rows="6" placeholder="选中 Instagram 消息后打开插件，或直接粘贴到这里……"></textarea>
+          <label for="operator-goal" class="goal-label">你想怎么回复（可选，留空就让 AI 判断）</label>
+          <input id="operator-goal" type="text" placeholder="例如：委婉拒绝 / 砍到 250 / 先稳住等 TL 确认 / 答应但要确认档期" />
           <details class="context-box">
             <summary>补充上下文（可选）</summary>
             <label for="context">最近几句对话或已确认条件</label>
             <textarea id="context" rows="4" placeholder="例如：已谈妥 300 USD、发布 IG 和 TikTok、广告授权 30 天……"></textarea>
-            <label for="operator-goal">你想怎么回复</label>
-            <input id="operator-goal" type="text" placeholder="例如：委婉砍到 250 USD，语气友好" />
           </details>
           <div class="button-row">
             <button id="load-selection" class="secondary">读取当前选中文字</button>
@@ -130,6 +130,13 @@
             <textarea id="reply-zh" class="reply-editor" rows="7" placeholder="可以写完整中文回复，也可以只写：委婉劝他修改，给出三点理由……"></textarea>
             <button id="generate-from-chinese" class="editor-tool primary">按中文意图生成双语回复</button>
             <small class="editor-tip">千问会判断你写的是正式回复还是大概意图，并按上面选择的「回复语言」生成自然外语及准确中文对照。</small>
+          </article>
+
+          <article class="card refine-card">
+            <span class="card-label">不满意？告诉 AI 怎么改</span>
+            <textarea id="refine-input" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 主语翻反了，是对方让我发发票 / 别提价格"></textarea>
+            <button id="refine-reply" class="editor-tool primary">让 AI 改这条回复</button>
+            <small class="editor-tip">会在当前外语回复的基础上按你说的改，可以反复改。</small>
           </article>
 
           <article id="internal-guidance" class="internal-card">

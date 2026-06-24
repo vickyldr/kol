@@ -373,6 +373,39 @@ async function rewriteReply(payload) {
   const product = findProduct(payload.productId);
   const direction = payload.direction;
 
+  if (direction === "refine") {
+    const replyLanguage =
+      String(payload.replyLanguage || "").trim() ||
+      String(payload.detectedLanguage || "").trim();
+    const result = await callQwen({
+      system: `你是中国 KOL 运营人员的双语回复修改助手。
+运营给出当前的外语回复和一条修改要求，请在现有回复的基础上按要求改写。
+没有被要求改动的部分尽量保持不变，只动需要改的地方。
+外语版本使用 reply_language；若为空则沿用当前回复的语言，绝不无故改成英语。
+必须准确区分谁让谁做什么，不得虚构此前发生的事情，也不得编造价格、日期、授权、付款承诺、平台或链接。
+reply_target 不能为空；reply_chinese 必须是 reply_target 的准确中文对照。
+
+${REPLY_STYLE}
+
+只返回 JSON：{"reply_target":"修改后的外语回复","reply_chinese":"准确中文对照"}。`,
+      user: JSON.stringify({
+        creator_message: payload.message || "",
+        conversation_context: payload.context || "",
+        selected_product: product,
+        reply_language: replyLanguage,
+        current_reply_target: payload.replyTarget || "",
+        current_reply_chinese: payload.replyChinese || "",
+        modification_request: payload.modification || ""
+      }),
+      maxTokens: 1000,
+      temperature: 0.25
+    });
+    return {
+      reply_target: String(result.reply_target || ""),
+      reply_chinese: String(result.reply_chinese || "")
+    };
+  }
+
   if (direction === "target_to_chinese") {
     const result = await callQwen({
       system: `你是 KOL 商务沟通翻译校对助手。
@@ -663,7 +696,11 @@ const server = http.createServer(async (req, res) => {
       ) {
         return json(res, 400, { error: "请先填写外语回复。" });
       }
-      if (
+      if (payload.direction === "refine") {
+        if (!String(payload.modification || "").trim()) {
+          return json(res, 400, { error: "请先写下要怎么改。" });
+        }
+      } else if (
         payload.direction !== "target_to_chinese" &&
         !String(payload.replyChinese || "").trim()
       ) {

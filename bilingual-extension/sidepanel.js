@@ -791,6 +791,53 @@ async function rewriteReply(direction) {
   }
 }
 
+// 板块 A 的“让 AI 改这条”：在当前回复基础上按修改要求迭代。
+async function refineReply() {
+  const refineInput = document.getElementById("refine-input");
+  const modification = refineInput.value.trim();
+  if (!modification) {
+    refineInput.focus();
+    return;
+  }
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const button = document.getElementById("refine-reply");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "正在修改…";
+  errorBox.classList.add("hidden");
+  try {
+    const body = await postRewrite({
+      direction: "refine",
+      message: messageInput.value.trim(),
+      context: contextInput.value.trim(),
+      productId: productSelect.value,
+      detectedLanguage: lastAnalysis?.detected_language || "",
+      replyLanguage: replyLanguageSelect?.value || "",
+      replyTarget: replyTargetInput.value.trim(),
+      replyChinese: replyChineseInput.value.trim(),
+      modification
+    });
+    replyTargetInput.value = body.reply_target || replyTargetInput.value;
+    replyChineseInput.value = body.reply_chinese || replyChineseInput.value;
+    if (lastAnalysis) {
+      lastAnalysis.reply_target = replyTargetInput.value;
+      lastAnalysis.reply_chinese = replyChineseInput.value;
+    }
+    refineInput.value = "";
+  } catch (error) {
+    errorBox.textContent =
+      error.name === "TimeoutError" ? "修改超时，请稍后重试。" : error.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
 // 板块 B 的回译核对：外语→中文。
 async function translateProReply() {
   if (!serviceOnline) {
@@ -1379,6 +1426,7 @@ document
 document
   .getElementById("generate-from-chinese")
   .addEventListener("click", () => rewriteReply("chinese_to_target"));
+document.getElementById("refine-reply").addEventListener("click", refineReply);
 document
   .getElementById("save-scenario")
   .addEventListener("click", () => openSaveDialog(reactiveSaveCtx()));
