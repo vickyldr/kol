@@ -15,6 +15,7 @@
         </div>
         <div class="header-actions">
           <button id="open-archive" class="status archive-entry" title="查看已保存的话术库">📚 话术库</button>
+          <button id="open-assets" class="status archive-entry" title="logo / 教程图 / 链接等物料">📎 物料库</button>
           <button id="service-status" class="status" title="点击重新检测">检测中</button>
         </div>
       </header>
@@ -278,6 +279,19 @@
 
           <p class="reply-hint">发送前请点「外语 → 中文回译核对」，确认外语意思没有出错。</p>
         </section>
+      </section>
+
+      <section id="assets-panel" class="archive-panel hidden">
+        <div class="card-heading">
+          <div>
+            <span class="card-label">物料库</span>
+            <h2>logo / 教程图 / 链接</h2>
+          </div>
+          <button id="new-asset" class="secondary" type="button">+ 上传物料</button>
+        </div>
+        <select id="assets-product"></select>
+        <div id="asset-form" class="archive-new-form hidden"></div>
+        <div id="assets-list"></div>
       </section>
 
       <!-- ===================== 共用：话术库 + 保存弹窗 ===================== -->

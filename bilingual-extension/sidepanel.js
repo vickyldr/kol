@@ -86,6 +86,13 @@ const PRODUCT_LABEL = {
   aicatch: "AICatch",
   通用: "通用（所有产品）"
 };
+const ALL_PRODUCTS = ["rythmix", "recco", "vivavideo", "vivacut", "aicatch", "通用"];
+
+const assetsPanel = document.getElementById("assets-panel");
+const assetsProduct = document.getElementById("assets-product");
+const assetForm = document.getElementById("asset-form");
+const assetsList = document.getElementById("assets-list");
+let assets = [];
 
 let serviceOnline = false;
 let waitTimer = null;
@@ -388,6 +395,7 @@ async function checkService() {
     await loadProducts();
     await loadQuickTemplates();
     await loadPlaybook();
+    await loadAssets();
   } catch {
     serviceOnline = false;
     statusButton.textContent = "AI 未启动";
@@ -1198,6 +1206,333 @@ function applyPlaybook(entry, lang, varInputs) {
   playbookDialog.close();
 }
 
+// ===================== 物料库 =====================
+async function loadAssets() {
+  if (!serviceOnline) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/assets`, {
+      headers: authHeaders()
+    });
+    const data = await response.json();
+    assets = Array.isArray(data) ? data : [];
+  } catch {
+    assets = [];
+  }
+}
+
+async function fetchAssetBlob(id) {
+  const response = await fetch(`${API_BASE}/api/assets/file/${id}`, {
+    headers: authHeaders()
+  });
+  if (!response.ok) throw new Error("图片加载失败");
+  return response.blob();
+}
+
+function renderAssetsProductFilter() {
+  const prods = [...new Set(assets.map((a) => a.product))];
+  assetsProduct.replaceChildren();
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "全部产品";
+  assetsProduct.appendChild(all);
+  for (const p of prods) {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = PRODUCT_LABEL[p] || p;
+    assetsProduct.appendChild(o);
+  }
+}
+
+function renderAssets() {
+  const product = assetsProduct.value;
+  assetsList.replaceChildren();
+  const items = assets.filter((a) => !product || a.product === product);
+  if (!items.length) {
+    const p = document.createElement("p");
+    p.className = "archive-meta";
+    p.textContent = isAdminUser()
+      ? "还没有物料，点右上「+ 上传物料」添加。"
+      : "该产品暂无物料。";
+    assetsList.appendChild(p);
+    return;
+  }
+  for (const a of items) assetsList.appendChild(buildAssetItem(a));
+}
+
+function buildAssetItem(asset) {
+  const item = document.createElement("article");
+  item.className = "archive-item";
+  const title = document.createElement("h3");
+  const icon = asset.type === "image" ? "📷 " : asset.type === "link" ? "🔗 " : "📝 ";
+  title.textContent = icon + asset.name;
+  const meta = document.createElement("p");
+  meta.className = "archive-meta";
+  meta.textContent = PRODUCT_LABEL[asset.product] || asset.product;
+  item.append(title, meta);
+
+  const actions = document.createElement("div");
+  actions.className = "archive-item-actions";
+
+  if (asset.type === "image") {
+    const img = document.createElement("img");
+    img.className = "asset-thumb";
+    img.alt = asset.name;
+    item.appendChild(img);
+    let blobUrl = "";
+    fetchAssetBlob(asset.id)
+      .then((blob) => {
+        blobUrl = URL.createObjectURL(blob);
+        img.src = blobUrl;
+        item._blob = blob;
+      })
+      .catch(() => {
+        img.replaceWith(document.createTextNode("（图片加载失败）"));
+      });
+    const dl = document.createElement("button");
+    dl.type = "button";
+    dl.className = "secondary";
+    dl.textContent = "下载图片";
+    dl.addEventListener("click", () => {
+      if (!blobUrl) return;
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${asset.name}.${asset.ext || "png"}`;
+      link.click();
+    });
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "secondary";
+    copy.textContent = "复制图片";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ [item._blob.type]: item._blob })
+        ]);
+        copy.textContent = "已复制";
+        setTimeout(() => (copy.textContent = "复制图片"), 1000);
+      } catch {
+        copy.textContent = "改用下载";
+      }
+    });
+    actions.append(dl, copy);
+  } else if (asset.type === "link") {
+    const url = document.createElement("p");
+    url.className = "asset-url";
+    url.textContent = asset.url;
+    item.appendChild(url);
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "secondary";
+    copy.textContent = "复制链接";
+    copy.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(asset.url);
+      copy.textContent = "已复制";
+      setTimeout(() => (copy.textContent = "复制链接"), 1000);
+    });
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "secondary";
+    open.textContent = "打开";
+    open.addEventListener("click", () => window.open(asset.url, "_blank"));
+    actions.append(copy, open);
+  } else {
+    const text = document.createElement("p");
+    text.className = "asset-note";
+    text.textContent = asset.text;
+    item.appendChild(text);
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "secondary";
+    copy.textContent = "复制文字";
+    copy.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(asset.text);
+      copy.textContent = "已复制";
+      setTimeout(() => (copy.textContent = "复制文字"), 1000);
+    });
+    actions.append(copy);
+  }
+
+  if (isAdminUser()) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "archive-delete";
+    del.textContent = "删除";
+    del.addEventListener("click", () => deleteAssetRecord(asset));
+    actions.appendChild(del);
+  }
+  item.appendChild(actions);
+  return item;
+}
+
+function openNewAssetForm() {
+  assetForm.classList.remove("hidden");
+  assetForm.replaceChildren();
+  const card = document.createElement("article");
+  card.className = "archive-item editing";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "上传物料";
+  card.appendChild(heading);
+
+  const typeLabel = document.createElement("label");
+  typeLabel.textContent = "类型";
+  const typeSel = document.createElement("select");
+  for (const [v, t] of [["image", "📷 图片"], ["link", "🔗 链接"], ["note", "📝 文字说明"]]) {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = t;
+    typeSel.appendChild(o);
+  }
+  card.append(typeLabel, typeSel);
+
+  const prodLabel = document.createElement("label");
+  prodLabel.textContent = "所属产品";
+  const prodSel = document.createElement("select");
+  for (const p of ALL_PRODUCTS) {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = PRODUCT_LABEL[p] || p;
+    prodSel.appendChild(o);
+  }
+  card.append(prodLabel, prodSel);
+
+  const nameLabel = document.createElement("label");
+  nameLabel.textContent = "名称";
+  const nameInput = document.createElement("input");
+  nameInput.placeholder = "例如：Rythmix Logo / 如何获取 User ID";
+  card.append(nameLabel, nameInput);
+
+  // 动态字段：图片→文件；链接→URL；说明→文本
+  const fieldWrap = document.createElement("div");
+  card.appendChild(fieldWrap);
+  function renderField() {
+    fieldWrap.replaceChildren();
+    const lab = document.createElement("label");
+    if (typeSel.value === "image") {
+      lab.textContent = "选择图片文件";
+      const f = document.createElement("input");
+      f.type = "file";
+      f.accept = "image/*";
+      f.id = "asset-file";
+      fieldWrap.append(lab, f);
+    } else if (typeSel.value === "link") {
+      lab.textContent = "链接地址";
+      const u = document.createElement("input");
+      u.id = "asset-url";
+      u.placeholder = "https://...";
+      fieldWrap.append(lab, u);
+    } else {
+      lab.textContent = "文字内容";
+      const t = document.createElement("textarea");
+      t.id = "asset-text";
+      t.rows = 4;
+      t.placeholder = "例如：打开 app → 设置 → 底部复制 User ID 发给我们";
+      fieldWrap.append(lab, t);
+    }
+  }
+  typeSel.addEventListener("change", renderField);
+  renderField();
+
+  const actions = document.createElement("div");
+  actions.className = "archive-item-actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "primary";
+  saveBtn.textContent = "保存";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "secondary";
+  cancelBtn.textContent = "取消";
+  cancelBtn.addEventListener("click", () => {
+    assetForm.replaceChildren();
+    assetForm.classList.add("hidden");
+  });
+  saveBtn.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      nameInput.focus();
+      return;
+    }
+    saveBtn.disabled = true;
+    saveBtn.textContent = "保存中…";
+    try {
+      await saveAsset(typeSel.value, name, prodSel.value);
+      assetForm.replaceChildren();
+      assetForm.classList.add("hidden");
+      await loadAssets();
+      renderAssetsProductFilter();
+      renderAssets();
+    } catch (error) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "保存";
+      const tip = document.createElement("p");
+      tip.className = "request-error";
+      tip.textContent = error.message;
+      card.appendChild(tip);
+    }
+  });
+  actions.append(saveBtn, cancelBtn);
+  card.appendChild(actions);
+  assetForm.appendChild(card);
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveAsset(type, name, product) {
+  const payload = { type, name, product };
+  if (type === "image") {
+    const file = document.getElementById("asset-file").files?.[0];
+    if (!file) throw new Error("请选择图片文件。");
+    payload.dataBase64 = await readFileAsBase64(file);
+    payload.ext = (file.name.split(".").pop() || "png").toLowerCase();
+  } else if (type === "link") {
+    payload.url = document.getElementById("asset-url").value.trim();
+    if (!payload.url) throw new Error("请填写链接。");
+  } else {
+    payload.text = document.getElementById("asset-text").value.trim();
+    if (!payload.text) throw new Error("请填写文字内容。");
+  }
+  const response = await fetch(`${API_BASE}/api/assets`, {
+    method: "POST",
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload)
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(
+      body.code === "FORBIDDEN"
+        ? "没有上传权限，请确认管理员口令。"
+        : body.error || "上传失败。"
+    );
+  }
+}
+
+async function deleteAssetRecord(asset) {
+  if (!window.confirm(`确定删除物料「${asset.name}」？`)) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/assets/delete`, {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ id: asset.id })
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "删除失败。");
+    await loadAssets();
+    renderAssetsProductFilter();
+    renderAssets();
+  } catch (error) {
+    errorBox.textContent = error.message;
+    errorBox.classList.remove("hidden");
+  }
+}
+
 async function exportArchive() {
   const response = await fetch(`${API_BASE}/api/archive/export`, {
     method: "POST",
@@ -1464,6 +1799,24 @@ document.getElementById("open-archive").addEventListener("click", async () => {
     }
   }
 });
+document.getElementById("open-assets").addEventListener("click", async () => {
+  assetsPanel.classList.toggle("hidden");
+  if (!assetsPanel.classList.contains("hidden")) {
+    document.getElementById("new-asset").classList.toggle("hidden", !isAdminUser());
+    assetForm.classList.add("hidden");
+    assetsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    try {
+      await loadAssets();
+      renderAssetsProductFilter();
+      renderAssets();
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.classList.remove("hidden");
+    }
+  }
+});
+document.getElementById("new-asset").addEventListener("click", openNewAssetForm);
+assetsProduct.addEventListener("change", renderAssets);
 archiveSearch.addEventListener("input", () => {
   clearTimeout(archiveSearchTimer);
   archiveSearchTimer = setTimeout(() => loadArchive(archiveSearch.value.trim()), 300);

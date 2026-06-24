@@ -20,6 +20,17 @@ const PLAYBOOK_PATH = path.join(ROOT, "data", "playbook.json");
 // 用户数据：产品资料、话术存档（放持久目录）。
 const PRODUCTS_PATH = path.join(DATA_DIR, "products.json");
 const ARCHIVE_PATH = path.join(DATA_DIR, "scenario-archive.json");
+// 物料库：metadata 存 assets.json，图片文件存 assets/ 子目录。
+const ASSETS_PATH = path.join(DATA_DIR, "assets.json");
+const ASSETS_DIR = path.join(DATA_DIR, "assets");
+
+const MIME = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp"
+};
 
 const REPLY_STYLE = `统一回复风格（生成任何对外回复时必须严格遵守）：
 - 简洁：只说必要的话，不堆砌客套、不重复，一般 2-4 句，能短不长。
@@ -572,6 +583,59 @@ function deleteRecord(id) {
   return { deleted: records.length - next.length };
 }
 
+function assetRecord(payload) {
+  const records = loadJson(ASSETS_PATH, []);
+  const id =
+    payload.id ||
+    `asset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const index = records.findIndex((record) => record.id === id);
+  const previous = index >= 0 ? records[index] : null;
+  const record = {
+    id,
+    product: String(payload.product || "通用"),
+    type: ["image", "link", "note"].includes(payload.type)
+      ? payload.type
+      : "note",
+    name: String(payload.name || "未命名物料").trim(),
+    url: String(payload.url || "").trim(),
+    text: String(payload.text || "").trim(),
+    ext: previous?.ext || "",
+    notes: String(payload.notes || "").trim(),
+    created_at: previous?.created_at || new Date().toISOString()
+  };
+  if (payload.type === "image" && payload.dataBase64) {
+    fs.mkdirSync(ASSETS_DIR, { recursive: true });
+    const ext =
+      String(payload.ext || "png")
+        .replace(/[^a-z0-9]/gi, "")
+        .toLowerCase() || "png";
+    fs.writeFileSync(
+      path.join(ASSETS_DIR, `${id}.${ext}`),
+      Buffer.from(payload.dataBase64, "base64")
+    );
+    record.ext = ext;
+  }
+  if (index >= 0) records[index] = record;
+  else records.unshift(record);
+  saveJson(ASSETS_PATH, records);
+  return record;
+}
+
+function deleteAsset(id) {
+  const records = loadJson(ASSETS_PATH, []);
+  const record = records.find((r) => r.id === id);
+  if (record?.ext) {
+    try {
+      fs.unlinkSync(path.join(ASSETS_DIR, `${id}.${record.ext}`));
+    } catch {
+      // 文件可能已不存在，忽略。
+    }
+  }
+  const next = records.filter((r) => r.id !== id);
+  saveJson(ASSETS_PATH, next);
+  return { deleted: records.length - next.length };
+}
+
 // 没设置管理员口令时（本机单人模式）视为管理员，保持旧行为；
 // 团队部署设置了 KOL_ASSISTANT_ADMIN_TOKEN 后，编辑/删除已有话术需带正确管理员口令。
 function isAdmin(req) {
@@ -615,6 +679,51 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && req.url === "/api/playbook") {
       return json(res, 200, loadJson(PLAYBOOK_PATH, []));
+    }
+
+    if (req.method === "GET" && req.url.startsWith("/api/assets/file/")) {
+      const id = decodeURIComponent(req.url.split("/api/assets/file/")[1] || "");
+      const record = loadJson(ASSETS_PATH, []).find((r) => r.id === id);
+      if (!record || !record.ext) {
+        return json(res, 404, { error: "物料不存在。" });
+      }
+      const file = path.join(ASSETS_DIR, `${id}.${record.ext}`);
+      if (!fs.existsSync(file)) return json(res, 404, { error: "文件不存在。" });
+      res.writeHead(200, {
+        "Content-Type": MIME[record.ext] || "application/octet-stream",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "max-age=3600"
+      });
+      return res.end(fs.readFileSync(file));
+    }
+
+    if (req.method === "GET" && req.url === "/api/assets") {
+      return json(res, 200, loadJson(ASSETS_PATH, []));
+    }
+
+    if (req.method === "POST" && req.url === "/api/assets") {
+      if (!isAdmin(req)) {
+        return json(res, 403, {
+          error: "只有管理员可以上传或修改物料。",
+          code: "FORBIDDEN"
+        });
+      }
+      const payload = await readBody(req);
+      return json(res, 200, assetRecord(payload));
+    }
+
+    if (req.method === "POST" && req.url === "/api/assets/delete") {
+      if (!isAdmin(req)) {
+        return json(res, 403, {
+          error: "只有管理员可以删除物料。",
+          code: "FORBIDDEN"
+        });
+      }
+      const payload = await readBody(req);
+      if (!String(payload.id || "").trim()) {
+        return json(res, 400, { error: "缺少要删除的物料 id。" });
+      }
+      return json(res, 200, deleteAsset(payload.id));
     }
 
     if (req.method === "GET" && req.url.startsWith("/api/archive")) {
