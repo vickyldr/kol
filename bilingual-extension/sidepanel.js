@@ -893,6 +893,18 @@ async function alignReplyAction() {
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "对照失败。");
     alignList.replaceChildren();
+    if ((body.pairs || []).length) {
+      const head = document.createElement("div");
+      head.className = "align-row align-head";
+      const ht = document.createElement("p");
+      ht.className = "align-target";
+      ht.textContent = "外语（鼠标放上去）";
+      const hc = document.createElement("p");
+      hc.className = "align-chinese";
+      hc.textContent = "中文对照";
+      head.append(ht, hc);
+      alignList.appendChild(head);
+    }
     for (let i = 0; i < (body.pairs || []).length; i += 1) {
       const p = body.pairs[i];
       const row = document.createElement("div");
