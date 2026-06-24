@@ -451,6 +451,30 @@ async function rewriteReply(payload) {
   const product = findProduct(payload.productId);
   const direction = payload.direction;
 
+  if (direction === "faithful") {
+    const replyLanguage =
+      String(payload.replyLanguage || "").trim() ||
+      String(payload.detectedLanguage || "").trim();
+    const result = await callQwen({
+      system: `你是翻译器。把运营给的中文准确翻译成目标语言。
+忠实原意、一字不改地传达：不增不减、不加问候语、不加结尾客套、不润色、不扩写、不改语气。
+准确保留主语、宾语、动作方向、时态、否定、数字和语气。
+目标语言用 reply_language；若为空则使用 creator_message 的语言，绝不无故改成英语。
+只返回 JSON：{"reply_target":"目标语言译文","reply_chinese":"原中文照抄"}。`,
+      user: JSON.stringify({
+        reply_language: replyLanguage,
+        creator_message: payload.message || "",
+        chinese_text: payload.replyChinese || ""
+      }),
+      maxTokens: 900,
+      temperature: 0
+    });
+    return {
+      reply_target: String(result.reply_target || ""),
+      reply_chinese: String(result.reply_chinese || payload.replyChinese || "")
+    };
+  }
+
   if (direction === "refine") {
     const replyLanguage =
       String(payload.replyLanguage || "").trim() ||

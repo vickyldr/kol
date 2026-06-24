@@ -326,8 +326,8 @@ async function generateQuickTemplate() {
   }
 }
 
-// 入口二：自由输入中文意图 → 润色生成双语（复用 /api/rewrite）。
-async function generateFreeReply() {
+// 入口二：自由输入中文 → 忠实翻译 或 润色生成双语（复用 /api/rewrite）。
+async function generateFree(direction) {
   const intent = freeIntentInput.value.trim();
   if (!intent) {
     freeIntentInput.focus();
@@ -338,16 +338,21 @@ async function generateFreeReply() {
     freeStatus.classList.remove("hidden");
     return;
   }
-
-  generateFreeButton.disabled = true;
-  const originalText = generateFreeButton.textContent;
-  generateFreeButton.textContent = "正在生成双语…";
-  freeStatus.textContent = `正在用${targetLanguage.value}润色你的话……`;
+  const faithful = direction === "faithful";
+  const button = faithful
+    ? document.getElementById("free-faithful")
+    : generateFreeButton;
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = faithful ? "正在翻译…" : "正在生成…";
+  freeStatus.textContent = faithful
+    ? `正在用${targetLanguage.value}忠实翻译……`
+    : `正在用${targetLanguage.value}润色你的话……`;
   freeStatus.classList.remove("hidden");
 
   try {
     const body = await postRewrite({
-      direction: "chinese_to_target",
+      direction,
       message: "",
       context: "",
       productId: productSelect.value,
@@ -367,8 +372,8 @@ async function generateFreeReply() {
     freeStatus.textContent =
       error.name === "TimeoutError" ? "生成超时，请重试。" : error.message;
   } finally {
-    generateFreeButton.disabled = false;
-    generateFreeButton.textContent = originalText;
+    button.disabled = false;
+    button.textContent = originalText;
   }
 }
 
@@ -764,11 +769,13 @@ async function rewriteReply(direction) {
   const button =
     direction === "target_to_chinese"
       ? document.getElementById("translate-to-chinese")
-      : document.getElementById("generate-from-chinese");
+      : direction === "faithful"
+        ? document.getElementById("faithful-from-chinese")
+        : document.getElementById("generate-from-chinese");
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent =
-    direction === "target_to_chinese" ? "正在翻译…" : "正在生成双语回复…";
+    direction === "chinese_to_target" ? "正在生成双语回复…" : "正在翻译…";
   errorBox.classList.add("hidden");
 
   try {
@@ -1899,7 +1906,10 @@ chatInput.addEventListener("keydown", (event) => {
 });
 document.getElementById("analyze").addEventListener("click", analyze);
 generateTemplateButton.addEventListener("click", generateQuickTemplate);
-generateFreeButton.addEventListener("click", generateFreeReply);
+generateFreeButton.addEventListener("click", () => generateFree("chinese_to_target"));
+document
+  .getElementById("free-faithful")
+  .addEventListener("click", () => generateFree("faithful"));
 translateProButton.addEventListener("click", translateProReply);
 document
   .getElementById("open-playbook-reactive")
@@ -1928,6 +1938,9 @@ document
 document
   .getElementById("generate-from-chinese")
   .addEventListener("click", () => rewriteReply("chinese_to_target"));
+document
+  .getElementById("faithful-from-chinese")
+  .addEventListener("click", () => rewriteReply("faithful"));
 document.getElementById("refine-reply").addEventListener("click", refineReply);
 document.getElementById("align-reply").addEventListener("click", alignReplyAction);
 document

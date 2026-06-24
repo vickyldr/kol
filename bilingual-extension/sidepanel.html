@@ -145,8 +145,11 @@
               </div>
             </div>
             <textarea id="reply-zh" class="reply-editor" rows="7" placeholder="可以写完整中文回复，也可以只写：委婉劝他修改，给出三点理由……"></textarea>
-            <button id="generate-from-chinese" class="editor-tool primary">按中文意图生成双语回复</button>
-            <small class="editor-tip">千问会判断你写的是正式回复还是大概意图，并按上面选择的「回复语言」生成自然外语及准确中文对照。</small>
+            <div class="button-row">
+              <button id="faithful-from-chinese" class="editor-tool">忠实翻译</button>
+              <button id="generate-from-chinese" class="editor-tool primary">润色生成双语</button>
+            </div>
+            <small class="editor-tip">忠实翻译＝照你写的一字不改翻；润色生成＝AI 加工成自然口语回复（会加问候收尾）。语言按上方「回复语言」。</small>
           </article>
 
           <article class="card">
@@ -255,8 +258,12 @@
         <section class="free-intent-card">
           <span class="card-label">入口二 · 自由说一句</span>
           <h2>我想说……</h2>
-          <textarea id="free-intent" rows="4" placeholder="用中文写你想表达的意思，例如：想问对方这周能不能先出个初稿，语气客气一点"></textarea>
-          <button id="generate-free" class="primary">润色并生成双语</button>
+          <textarea id="free-intent" rows="4" placeholder="写你想说的话。已经是成稿就用「忠实翻译」；只是大概意思就用「润色生成」让 AI 加工"></textarea>
+          <div class="button-row">
+            <button id="free-faithful" class="secondary">忠实翻译</button>
+            <button id="generate-free" class="primary">润色生成</button>
+          </div>
+          <small class="editor-tip">忠实翻译＝一字不改照翻（不加问候/收尾）；润色生成＝AI 加工成自然口语回复。</small>
           <p id="free-status" class="template-status hidden"></p>
         </section>
 
