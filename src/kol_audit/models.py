@@ -37,7 +37,14 @@ class Approval(BaseModel):
     video_list: List[str] = Field(
         default_factory=list, description="视频清单，每条是一个视频链接/标识"
     )
+    platforms: List[str] = Field(
+        default_factory=list,
+        description="视频清单里每条的「投放平台」，如 Instagram / TikTok / Youtube / 其他",
+    )
 
+    online_type: Optional[str] = Field(
+        default=None, description="上线类型原文，如 KOL上线 / 社媒采买 / SEO上线 / 非KOL上线"
+    )
     is_prepayment: bool = Field(default=False, description="是否为预付款流程")
     is_non_kol: bool = Field(default=False, description="是否为非 KOL 上线")
 

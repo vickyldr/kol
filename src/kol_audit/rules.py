@@ -15,7 +15,8 @@
   7. 实际视频数 × 平台数 = 应填写合作视频数量
   8. 视频清单条数是否与合作视频数量一致
   9. 预付款流程单独标记
- 10. 非 KOL 上线单独标记
+ 10. 上线类型非「KOL上线」一律转人工（社媒采买/SEO上线等）
+ 10c. 仅发布 YouTube（长视频）应为「SEO上线」，转人工
 """
 
 from __future__ import annotations
@@ -410,6 +411,38 @@ def check_notes_consistency(a: Approval, c: Contract) -> CheckResult:
     return CheckResult(name, Status.PASS, "无备注可比")
 
 
+def check_online_type(a: Approval) -> CheckResult:
+    """检查 10：上线类型必须是「KOL上线」，否则一律转人工。
+
+    社媒采买、SEO上线、非 KOL 上线等任何非常规 KOL 上线，都要单独人工确认。
+    """
+    name = "10. 上线类型(非KOL转人工)"
+    t = _norm(a.online_type)
+    is_kol = t in (_norm("KOL上线"), "kol上线", "kol")
+    if a.is_non_kol or (t and not is_kol):
+        label = a.online_type or "非 KOL 上线"
+        return CheckResult(name, Status.FLAG, f"上线类型为「{label}」，非 KOL上线，请单独人工确认")
+    return CheckResult(name, Status.PASS, "KOL上线")
+
+
+def _is_youtube(p: Optional[str]) -> bool:
+    n = _norm(p)
+    return "youtube" in n or "油管" in n or n == "yt" or "shorts" in n
+
+
+def check_youtube_only(a: Approval) -> CheckResult:
+    """检查 10c：若本次只发布 YouTube，那是长视频（非短视频），上线类型应为「SEO上线」，转人工。"""
+    name = "10c. 纯YouTube长视频(应SEO上线)"
+    plats = [p for p in a.platforms if _norm(p)]
+    if plats and all(_is_youtube(p) for p in plats):
+        return CheckResult(
+            name,
+            Status.FLAG,
+            "本次仅发布 YouTube（属长视频、非短视频），上线类型应填「SEO上线」，请人工确认",
+        )
+    return CheckResult(name, Status.PASS, "非纯 YouTube 发布")
+
+
 def check_video_duplicates(a: Approval) -> CheckResult:
     """检查 8b：视频清单里的链接不能重复（同一链接贴两遍多半是漏填/错填）。"""
     name = "8b. 视频清单无重复链接"
@@ -463,12 +496,16 @@ def audit(a: Approval, c: Contract) -> AuditResult:
     # 备注一致性核对
     checks.append(check_notes_consistency(a, c))
 
-    # 单独标记：预付款 / 非 KOL，不影响 PASS/FAIL
+    # 单独标记：预付款 / 上线类型 / 纯 YouTube 长视频，不影响 PASS/FAIL
     flags: List[CheckResult] = []
     if a.is_prepayment:
         flags.append(CheckResult("9. 预付款", Status.FLAG, "本单为预付款流程，请单独走预付款审核"))
-    if a.is_non_kol:
-        flags.append(CheckResult("10. 非 KOL 上线", Status.FLAG, "本单为非 KOL 上线，请单独标记处理"))
+    ot = check_online_type(a)
+    if ot.status is Status.FLAG:
+        flags.append(ot)
+    yt = check_youtube_only(a)
+    if yt.status is Status.FLAG:
+        flags.append(yt)
 
     overall = Status.FAIL if any(ch.status is Status.FAIL for ch in checks) else Status.PASS
     return AuditResult(overall=overall, checks=checks, flags=flags)

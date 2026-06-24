@@ -261,6 +261,36 @@ def test_non_kol_is_flagged():
     assert any(f.name.startswith("10") for f in res.flags)
 
 
+def test_online_type_not_kol_is_flagged():
+    # 社媒采买 / SEO上线 等任何非 KOL上线 → 转人工
+    res = audit(make_approval(online_type="社媒采买"), make_contract())
+    assert any(f.name.startswith("10") and "社媒采买" in f.detail for f in res.flags)
+    assert res.overall is Status.PASS  # 仅人工标记，不算失败
+
+
+def test_online_type_kol_not_flagged():
+    res = audit(make_approval(online_type="KOL上线"), make_contract())
+    assert not any(f.name.startswith("10.") for f in res.flags)
+
+
+def test_youtube_only_is_flagged_as_seo():
+    # 只发 YouTube → 长视频，应为 SEO上线，转人工
+    res = audit(
+        make_approval(online_type="KOL上线", platforms=["Youtube"],
+                      video_list=["yt1"], collab_video_count=1, amount=Decimal("300")),
+        make_contract(),
+    )
+    assert any(f.name.startswith("10c") and "SEO" in f.detail for f in res.flags)
+
+
+def test_youtube_among_multi_platforms_not_flagged():
+    res = audit(
+        make_approval(online_type="KOL上线", platforms=["Instagram", "TikTok", "Youtube"]),
+        make_contract(),
+    )
+    assert not any(f.name.startswith("10c") for f in res.flags)
+
+
 def test_dedup(tmp_path):
     store = DedupStore(str(tmp_path / "store.json"))
     a = make_approval()
