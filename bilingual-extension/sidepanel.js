@@ -1346,75 +1346,99 @@ function buildAssetItem(asset) {
   const actions = document.createElement("div");
   actions.className = "archive-item-actions";
 
-  if (asset.type === "image") {
-    const img = document.createElement("img");
-    img.className = "asset-thumb";
-    img.alt = asset.name;
-    item.appendChild(img);
+  if (asset.type === "image" || asset.type === "video") {
+    const isVideo = asset.type === "video";
+    const mediaWrap = document.createElement("div");
+    item.appendChild(mediaWrap);
+
+    let blob = null;
     let blobUrl = "";
-    fetchAssetBlob(asset.id)
-      .then((blob) => {
+    let expanded = false;
+    async function ensureBlob() {
+      if (!blob) {
+        blob = await fetchAssetBlob(asset.id);
         blobUrl = URL.createObjectURL(blob);
-        img.src = blobUrl;
-        item._blob = blob;
-      })
-      .catch(() => {
-        img.replaceWith(document.createTextNode("（图片加载失败）"));
-      });
-    const dl = document.createElement("button");
-    dl.type = "button";
-    dl.className = "secondary";
-    dl.textContent = "下载图片";
-    dl.addEventListener("click", () => {
-      if (!blobUrl) return;
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `${asset.name}.${asset.ext || "png"}`;
-      link.click();
-    });
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "secondary";
-    copy.textContent = "复制图片";
-    copy.addEventListener("click", async () => {
+      }
+      return blob;
+    }
+
+    const viewBtn = document.createElement("button");
+    viewBtn.type = "button";
+    viewBtn.className = "secondary";
+    viewBtn.textContent = isVideo ? "👁 查看视频" : "👁 查看图片";
+    viewBtn.addEventListener("click", async () => {
+      if (expanded) {
+        mediaWrap.replaceChildren();
+        expanded = false;
+        viewBtn.textContent = isVideo ? "👁 查看视频" : "👁 查看图片";
+        return;
+      }
+      viewBtn.disabled = true;
+      viewBtn.textContent = "加载中…";
       try {
-        await navigator.clipboard.write([
-          new ClipboardItem({ [item._blob.type]: item._blob })
-        ]);
-        copy.textContent = "已复制";
-        setTimeout(() => (copy.textContent = "复制图片"), 1000);
+        await ensureBlob();
+        mediaWrap.replaceChildren();
+        const media = document.createElement(isVideo ? "video" : "img");
+        if (isVideo) {
+          media.className = "asset-video";
+          media.controls = true;
+        } else {
+          media.className = "asset-thumb";
+          media.alt = asset.name;
+        }
+        media.src = blobUrl;
+        mediaWrap.appendChild(media);
+        expanded = true;
+        viewBtn.textContent = "收起";
       } catch {
-        copy.textContent = "改用下载";
+        mediaWrap.textContent = "（加载失败）";
+      } finally {
+        viewBtn.disabled = false;
+        if (!expanded && viewBtn.textContent === "加载中…") {
+          viewBtn.textContent = isVideo ? "👁 查看视频" : "👁 查看图片";
+        }
       }
     });
-    actions.append(dl, copy);
-  } else if (asset.type === "video") {
-    const video = document.createElement("video");
-    video.className = "asset-video";
-    video.controls = true;
-    video.preload = "metadata";
-    item.appendChild(video);
-    let blobUrl = "";
-    fetchAssetBlob(asset.id)
-      .then((blob) => {
-        blobUrl = URL.createObjectURL(blob);
-        video.src = blobUrl;
-      })
-      .catch(() => {
-        video.replaceWith(document.createTextNode("（视频加载失败）"));
-      });
+
     const dl = document.createElement("button");
     dl.type = "button";
     dl.className = "secondary";
-    dl.textContent = "下载视频";
-    dl.addEventListener("click", () => {
-      if (!blobUrl) return;
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `${asset.name}.${asset.ext || "mp4"}`;
-      link.click();
+    dl.textContent = isVideo ? "下载视频" : "下载图片";
+    dl.addEventListener("click", async () => {
+      dl.disabled = true;
+      try {
+        await ensureBlob();
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `${asset.name}.${asset.ext || (isVideo ? "mp4" : "png")}`;
+        link.click();
+      } catch {
+        dl.textContent = "下载失败";
+      } finally {
+        dl.disabled = false;
+      }
     });
-    actions.append(dl);
+    actions.append(viewBtn, dl);
+
+    if (!isVideo) {
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "secondary";
+      copy.textContent = "复制图片";
+      copy.addEventListener("click", async () => {
+        try {
+          await ensureBlob();
+          await navigator.clipboard.write([
+            new ClipboardItem({ [blob.type]: blob })
+          ]);
+          copy.textContent = "已复制";
+          setTimeout(() => (copy.textContent = "复制图片"), 1000);
+        } catch {
+          copy.textContent = "改用下载";
+        }
+      });
+      actions.append(copy);
+    }
   } else if (asset.type === "link") {
     const url = document.createElement("p");
     url.className = "asset-url";
