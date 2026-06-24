@@ -12,8 +12,8 @@
     "category": "触达",
     "name": "冷启动邮件",
     "description": "首次通过邮件正式邀约",
-    "chinese_intent": "写一封正式但不生硬的合作邀约邮件：介绍 {{product_name}}，表达对红人内容的认可，说明希望讨论短视频合作，并询问报价与档期。未确认的平台、时长和授权条件不要编造。",
-    "required_variables": ["product_name", "creator_name"]
+    "chinese_intent": "写一封正式但不生硬的合作邀约邮件：用通用问候开头（不要带对方名字），介绍 {{product_name}}，表达对红人内容的认可，说明希望讨论短视频合作，并询问报价与档期。未确认的平台、时长和授权条件不要编造。",
+    "required_variables": ["product_name"]
   },
   {
     "id": "ask_rate",

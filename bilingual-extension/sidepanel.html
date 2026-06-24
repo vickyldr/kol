@@ -133,6 +133,14 @@
             <small class="editor-tip">千问会判断你写的是正式回复还是大概意图，并按上面选择的「回复语言」生成自然外语及准确中文对照。</small>
           </article>
 
+          <article class="card">
+            <div class="card-heading">
+              <span class="card-label">逐句对照（核对哪句翻错）</span>
+              <button id="align-reply" class="secondary" type="button">📑 生成逐句对照</button>
+            </div>
+            <div id="align-list" class="align-list"></div>
+          </article>
+
           <article class="card refine-card">
             <span class="card-label">不满意？告诉 AI 怎么改</span>
             <textarea id="refine-input" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 主语翻反了，是对方让我发发票 / 别提价格"></textarea>

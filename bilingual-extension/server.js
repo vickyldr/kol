@@ -33,11 +33,11 @@ const MIME = {
 };
 
 const REPLY_STYLE = `统一回复风格（生成任何对外回复时必须严格遵守）：
-- 简洁：只说必要的话，不堆砌客套、不重复，一般 2-4 句，能短不长。
-- 专业：符合商务沟通习惯，准确可信。
-- 易懂：用对方容易理解的表达，不绕弯、不用生僻说法。
-- 有逻辑：先说重点，再补充必要信息，条理清楚。
-- 有礼貌：友好、尊重，但不卑微、不过度道歉、不夸张吹捧。
+- 有温度、有礼貌：开头适当问候、结尾适当收尾，语气友好自然、像真人在聊天，不要硬邦邦、不要只丢一句干巴巴的话。但也不过度寒暄、不卑微、不过度道歉、不夸张吹捧。
+- 打招呼用通用问候（中文"你好"，英文"Hi there / Hello"，其他语言对应的通用问候），【绝对不要带对方的名字或 ID】，也不要出现"【填写名字】""{name}"这类占位。
+- 专业、易懂：符合商务沟通习惯，准确可信，用对方容易理解的表达，不绕弯、不用生僻说法。
+- 有逻辑：先说重点，再补充必要信息，条理清楚；篇幅适中，不啰嗦也不过短。
+- 尽量不留变量：能自然表达就不要用"【请填写：xxx】"这类填空占位。只有价格、日期、链接、数量这类必须由人确认的关键信息缺失时才保留占位；其余一律用自然措辞写顺，不要为了严谨而到处挖空。
 - 忠于原意：严格按照运营给出的中文意图或草稿来写，绝不自行添加运营没有表达的承诺、理由、数字或信息；运营写得简略时只做自然润色与补全礼貌用语，不擅自扩写内容。`;
 
 function json(res, status, body) {
@@ -535,6 +535,31 @@ ${REPLY_STYLE}
   };
 }
 
+async function alignReply(payload) {
+  const result = await callQwen({
+    system: `你是双语逐句对照助手。把运营给的外语回复按句子拆开，每个句子给出准确的中文对照，顺序与原文完全一致。
+不要漏句、不要把多句合并、不要改写或润色原文，只做切分和对照翻译。
+中文对照要忠实，准确保留主语、宾语、动作方向、时态、否定与语气。
+只返回 JSON：{"pairs":[{"target":"外语句子","chinese":"该句中文对照"}]}。`,
+    user: JSON.stringify({
+      reply_target: payload.replyTarget || "",
+      reply_chinese: payload.replyChinese || ""
+    }),
+    maxTokens: 1400,
+    temperature: 0
+  });
+  return {
+    pairs: Array.isArray(result.pairs)
+      ? result.pairs
+          .map((p) => ({
+            target: String(p?.target || "").trim(),
+            chinese: String(p?.chinese || "").trim()
+          }))
+          .filter((p) => p.target)
+      : []
+  };
+}
+
 function archiveRecord(payload) {
   const records = loadJson(ARCHIVE_PATH, []);
   const now = new Date().toISOString();
@@ -621,6 +646,10 @@ function assetRecord(payload) {
   return record;
 }
 
+function assetHasId(id) {
+  return loadJson(ASSETS_PATH, []).some((r) => r.id === id);
+}
+
 function deleteAsset(id) {
   const records = loadJson(ASSETS_PATH, []);
   const record = records.find((r) => r.id === id);
@@ -702,13 +731,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && req.url === "/api/assets") {
-      if (!isAdmin(req)) {
+      const payload = await readBody(req);
+      // 新增物料所有成员可做；修改已有物料需要管理员。
+      if (payload.id && assetHasId(payload.id) && !isAdmin(req)) {
         return json(res, 403, {
-          error: "只有管理员可以上传或修改物料。",
+          error: "只有管理员可以修改已有物料。",
           code: "FORBIDDEN"
         });
       }
-      const payload = await readBody(req);
       return json(res, 200, assetRecord(payload));
     }
 
@@ -816,6 +846,14 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "请先在中文框写下回复或大概意图。" });
       }
       return json(res, 200, await rewriteReply(payload));
+    }
+
+    if (req.method === "POST" && req.url === "/api/align") {
+      const payload = await readBody(req);
+      if (!String(payload.replyTarget || "").trim()) {
+        return json(res, 400, { error: "请先有一条外语回复。" });
+      }
+      return json(res, 200, await alignReply(payload));
     }
 
     if (req.method === "POST" && req.url === "/api/generate-template") {

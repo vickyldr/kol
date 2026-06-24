@@ -37,6 +37,11 @@ h1 { margin: 0; font-size: 23px; line-height: 1.2; }
 .refine-status { margin: 8px 0 0; font-size: 12px; color: #137344; font-weight: 700; line-height: 1.5; }
 .refine-status.error { color: #b42318; }
 .reply-editor.flash { border-color: #7769ea; box-shadow: 0 0 0 3px rgba(119,105,234,.28); }
+.align-list { margin-top: 4px; }
+.align-row { margin-top: 9px; padding: 9px 10px; border-radius: 10px; background: #f5f6fa; }
+.align-row:first-child { margin-top: 6px; }
+.align-target { margin: 0; color: #20283a; font-size: 13px; line-height: 1.55; }
+.align-chinese { margin: 4px 0 0; color: #5b6478; font-size: 12px; line-height: 1.5; }
 .status { padding: 7px 10px; border-radius: 999px; background: #e9e7ff; color: #5448c8; font-size: 11px; font-weight: 700; }
 .archive-entry { cursor: pointer; }
 .status.online { background: #e2f8ec; color: #137344; }

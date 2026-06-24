@@ -852,6 +852,62 @@ async function refineReply() {
   }
 }
 
+// 逐句对照：把当前外语回复按句拆开，每句给中文对照，方便核对哪句翻错。
+async function alignReplyAction() {
+  const alignBtn = document.getElementById("align-reply");
+  const alignList = document.getElementById("align-list");
+  const target = replyTargetInput.value.trim();
+  if (!target) {
+    replyTargetInput.focus();
+    return;
+  }
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const orig = alignBtn.textContent;
+  alignBtn.disabled = true;
+  alignBtn.textContent = "对照中…";
+  try {
+    const response = await fetch(`${API_BASE}/api/align`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        replyTarget: target,
+        replyChinese: replyChineseInput.value.trim()
+      }),
+      signal: AbortSignal.timeout(65000)
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "对照失败。");
+    alignList.replaceChildren();
+    for (let i = 0; i < (body.pairs || []).length; i += 1) {
+      const p = body.pairs[i];
+      const row = document.createElement("div");
+      row.className = "align-row";
+      const t = document.createElement("p");
+      t.className = "align-target";
+      t.textContent = `${i + 1}. ${p.target}`;
+      const c = document.createElement("p");
+      c.className = "align-chinese";
+      c.textContent = p.chinese;
+      row.append(t, c);
+      alignList.appendChild(row);
+    }
+  } catch (error) {
+    alignList.replaceChildren();
+    const tip = document.createElement("p");
+    tip.className = "request-error";
+    tip.textContent =
+      error.name === "TimeoutError" ? "对照超时，请重试。" : error.message;
+    alignList.appendChild(tip);
+  } finally {
+    alignBtn.disabled = false;
+    alignBtn.textContent = orig;
+  }
+}
+
 // 板块 B 的回译核对：外语→中文。
 async function translateProReply() {
   if (!serviceOnline) {
@@ -1507,17 +1563,11 @@ async function saveAsset(type, name, product) {
   }
   const response = await fetch(`${API_BASE}/api/assets`, {
     method: "POST",
-    headers: adminHeaders({ "Content-Type": "application/json" }),
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload)
   });
   const body = await response.json();
-  if (!response.ok) {
-    throw new Error(
-      body.code === "FORBIDDEN"
-        ? "没有上传权限，请确认管理员口令。"
-        : body.error || "上传失败。"
-    );
-  }
+  if (!response.ok) throw new Error(body.error || "上传失败。");
 }
 
 async function deleteAssetRecord(asset) {
@@ -1724,6 +1774,7 @@ document
   .getElementById("generate-from-chinese")
   .addEventListener("click", () => rewriteReply("chinese_to_target"));
 document.getElementById("refine-reply").addEventListener("click", refineReply);
+document.getElementById("align-reply").addEventListener("click", alignReplyAction);
 document
   .getElementById("save-scenario")
   .addEventListener("click", () => openSaveDialog(reactiveSaveCtx()));
@@ -1764,7 +1815,7 @@ document.getElementById("open-archive").addEventListener("click", async () => {
 document.getElementById("open-assets").addEventListener("click", async () => {
   assetsPanel.classList.toggle("hidden");
   if (!assetsPanel.classList.contains("hidden")) {
-    document.getElementById("new-asset").classList.toggle("hidden", !isAdminUser());
+    document.getElementById("new-asset").classList.remove("hidden");
     assetForm.classList.add("hidden");
     assetsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
     try {
