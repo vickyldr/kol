@@ -29,7 +29,11 @@ const MIME = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   gif: "image/gif",
-  webp: "image/webp"
+  webp: "image/webp",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  m4v: "video/x-m4v"
 };
 
 const REPLY_STYLE = `统一回复风格（生成任何对外回复时必须严格遵守）：
@@ -51,9 +55,18 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function readBody(req) {
+async function readBody(req, maxBytes = 48 * 1024 * 1024) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      const error = new Error("上传内容过大（视频上限约 33MB），请压缩或改用链接。");
+      error.code = "TOO_LARGE";
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   const text = Buffer.concat(chunks).toString("utf8");
   return text ? JSON.parse(text) : {};
 }
@@ -672,7 +685,7 @@ function assetRecord(payload) {
   const record = {
     id,
     product: String(payload.product || "通用"),
-    type: ["image", "link", "note"].includes(payload.type)
+    type: ["image", "video", "link", "note"].includes(payload.type)
       ? payload.type
       : "note",
     name: String(payload.name || "未命名物料").trim(),
@@ -682,12 +695,15 @@ function assetRecord(payload) {
     notes: String(payload.notes || "").trim(),
     created_at: previous?.created_at || new Date().toISOString()
   };
-  if (payload.type === "image" && payload.dataBase64) {
+  if (
+    (payload.type === "image" || payload.type === "video") &&
+    payload.dataBase64
+  ) {
     fs.mkdirSync(ASSETS_DIR, { recursive: true });
     const ext =
-      String(payload.ext || "png")
+      String(payload.ext || (payload.type === "video" ? "mp4" : "png"))
         .replace(/[^a-z0-9]/gi, "")
-        .toLowerCase() || "png";
+        .toLowerCase() || (payload.type === "video" ? "mp4" : "png");
     fs.writeFileSync(
       path.join(ASSETS_DIR, `${id}.${ext}`),
       Buffer.from(payload.dataBase64, "base64")
@@ -777,7 +793,8 @@ const server = http.createServer(async (req, res) => {
         "Access-Control-Allow-Origin": "*",
         "Cache-Control": "max-age=3600"
       });
-      return res.end(fs.readFileSync(file));
+      // 流式发送，避免大视频一次性读进内存压垮 VPS。
+      return fs.createReadStream(file).pipe(res);
     }
 
     if (req.method === "GET" && req.url === "/api/assets") {

@@ -1329,7 +1329,14 @@ function buildAssetItem(asset) {
   const item = document.createElement("article");
   item.className = "archive-item";
   const title = document.createElement("h3");
-  const icon = asset.type === "image" ? "📷 " : asset.type === "link" ? "🔗 " : "📝 ";
+  const icon =
+    asset.type === "image"
+      ? "📷 "
+      : asset.type === "video"
+        ? "🎬 "
+        : asset.type === "link"
+          ? "🔗 "
+          : "📝 ";
   title.textContent = icon + asset.name;
   const meta = document.createElement("p");
   meta.className = "archive-meta";
@@ -1381,6 +1388,33 @@ function buildAssetItem(asset) {
       }
     });
     actions.append(dl, copy);
+  } else if (asset.type === "video") {
+    const video = document.createElement("video");
+    video.className = "asset-video";
+    video.controls = true;
+    video.preload = "metadata";
+    item.appendChild(video);
+    let blobUrl = "";
+    fetchAssetBlob(asset.id)
+      .then((blob) => {
+        blobUrl = URL.createObjectURL(blob);
+        video.src = blobUrl;
+      })
+      .catch(() => {
+        video.replaceWith(document.createTextNode("（视频加载失败）"));
+      });
+    const dl = document.createElement("button");
+    dl.type = "button";
+    dl.className = "secondary";
+    dl.textContent = "下载视频";
+    dl.addEventListener("click", () => {
+      if (!blobUrl) return;
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${asset.name}.${asset.ext || "mp4"}`;
+      link.click();
+    });
+    actions.append(dl);
   } else if (asset.type === "link") {
     const url = document.createElement("p");
     url.className = "asset-url";
@@ -1443,7 +1477,7 @@ function openNewAssetForm() {
   const typeLabel = document.createElement("label");
   typeLabel.textContent = "类型";
   const typeSel = document.createElement("select");
-  for (const [v, t] of [["image", "📷 图片"], ["link", "🔗 链接"], ["note", "📝 文字说明"]]) {
+  for (const [v, t] of [["image", "📷 图片"], ["video", "🎬 视频"], ["link", "🔗 链接"], ["note", "📝 文字说明"]]) {
     const o = document.createElement("option");
     o.value = v;
     o.textContent = t;
@@ -1474,13 +1508,20 @@ function openNewAssetForm() {
   function renderField() {
     fieldWrap.replaceChildren();
     const lab = document.createElement("label");
-    if (typeSel.value === "image") {
-      lab.textContent = "选择图片文件";
+    if (typeSel.value === "image" || typeSel.value === "video") {
+      const isVideo = typeSel.value === "video";
+      lab.textContent = isVideo ? "选择视频文件（约 33MB 内）" : "选择图片文件";
       const f = document.createElement("input");
       f.type = "file";
-      f.accept = "image/*";
+      f.accept = isVideo ? "video/*" : "image/*";
       f.id = "asset-file";
       fieldWrap.append(lab, f);
+      if (isVideo) {
+        const tip = document.createElement("small");
+        tip.className = "editor-tip";
+        tip.textContent = "大视频建议改用「🔗 链接」（贴云盘/YouTube 链接），更快更稳。";
+        fieldWrap.append(tip);
+      }
     } else if (typeSel.value === "link") {
       lab.textContent = "链接地址";
       const u = document.createElement("input");
@@ -1553,11 +1594,16 @@ function readFileAsBase64(file) {
 
 async function saveAsset(type, name, product) {
   const payload = { type, name, product };
-  if (type === "image") {
+  if (type === "image" || type === "video") {
     const file = document.getElementById("asset-file").files?.[0];
-    if (!file) throw new Error("请选择图片文件。");
+    if (!file) throw new Error(type === "video" ? "请选择视频文件。" : "请选择图片文件。");
+    if (type === "video" && file.size > 34 * 1024 * 1024) {
+      throw new Error("视频太大（约 33MB 内），请压缩或改用「🔗 链接」。");
+    }
     payload.dataBase64 = await readFileAsBase64(file);
-    payload.ext = (file.name.split(".").pop() || "png").toLowerCase();
+    payload.ext = (
+      file.name.split(".").pop() || (type === "video" ? "mp4" : "png")
+    ).toLowerCase();
   } else if (type === "link") {
     payload.url = document.getElementById("asset-url").value.trim();
     if (!payload.url) throw new Error("请填写链接。");

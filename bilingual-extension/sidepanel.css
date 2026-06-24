@@ -173,6 +173,7 @@ button { border: 0; border-radius: 10px; cursor: pointer; font: 700 12px/1 syste
 .archive-item p { margin: 4px 0; color: #5c6475; font-size: 11px; line-height: 1.5; }
 .archive-meta { color: #766ccf !important; }
 .asset-thumb { display: block; max-width: 100%; max-height: 200px; margin: 8px 0; border: 1px solid #e6e8ef; border-radius: 10px; background: #fafbfe; }
+.asset-video { display: block; width: 100%; max-height: 240px; margin: 8px 0; border-radius: 10px; background: #000; }
 .asset-url { margin: 6px 0; color: #4f46b8; font-size: 12px; word-break: break-all; }
 .asset-note { margin: 6px 0; color: #30384d; font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
 #assets-product { margin: 4px 0 10px; }
