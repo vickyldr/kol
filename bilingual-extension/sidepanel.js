@@ -515,6 +515,9 @@ function splitSentences(s) {
 function renderBilingualSplit(target, chinese) {
   const box = document.getElementById("bi-split");
   if (!box) return;
+  // 新回复出来时清掉上一条的逐句核对结果，避免对不上
+  const al = document.getElementById("align-list");
+  if (al) al.replaceChildren();
   box.replaceChildren();
   const ts = splitSentences(target);
   const zs = splitSentences(chinese);
@@ -1006,11 +1009,14 @@ async function alignReplyAction() {
       head.className = "align-row align-head";
       const ht = document.createElement("p");
       ht.className = "align-target";
-      ht.textContent = "外语（鼠标放上去）";
+      ht.textContent = "外语";
       const hc = document.createElement("p");
       hc.className = "align-chinese";
       hc.textContent = "中文对照";
-      head.append(ht, hc);
+      const hk = document.createElement("p");
+      hk.className = "align-copy-head";
+      hk.textContent = "单句";
+      head.append(ht, hc, hk);
       alignList.appendChild(head);
     }
     for (let i = 0; i < (body.pairs || []).length; i += 1) {
@@ -1023,7 +1029,17 @@ async function alignReplyAction() {
       const c = document.createElement("p");
       c.className = "align-chinese";
       c.textContent = p.chinese;
-      row.append(t, c);
+      // 单句复制：只想用其中一句时，直接复制这一句外语
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "align-copy secondary";
+      copyBtn.type = "button";
+      copyBtn.textContent = "复制";
+      copyBtn.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(p.target || "");
+        copyBtn.textContent = "已复制";
+        setTimeout(() => { copyBtn.textContent = "复制"; }, 1000);
+      });
+      row.append(t, c, copyBtn);
       alignList.appendChild(row);
     }
   } catch (error) {
@@ -2337,6 +2353,7 @@ templateSelect.addEventListener("change", () => {
   if (template) selectQuickTemplate(template);
 });
 document.getElementById("rewrite-go").addEventListener("click", rewriteGo);
+document.getElementById("align-reply").addEventListener("click", alignReplyAction);
 document
   .getElementById("save-scenario")
   .addEventListener("click", () => openSaveDialog(reactiveSaveCtx()));

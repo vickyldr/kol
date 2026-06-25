@@ -184,6 +184,7 @@
               <span class="card-label">双语回复</span>
               <div class="heading-buttons">
                 <button class="save-trigger secondary" type="button">保存为话术</button>
+                <button id="align-reply" class="secondary" type="button">🔍 逐句核对</button>
                 <button data-copy-value="reply-target">复制外语</button>
               </div>
             </div>
@@ -209,6 +210,8 @@
                 </select>
               </label>
             </div>
+            <!-- 逐句核对（回译验证 · 每句可单独复制） -->
+            <div id="align-list" class="align-list"></div>
             <!-- 数据载体（隐藏）：供复制/保存/改写复用 -->
             <textarea id="reply-target" class="hidden"></textarea>
             <textarea id="reply-zh" class="hidden"></textarea>

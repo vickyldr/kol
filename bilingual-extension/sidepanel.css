@@ -53,7 +53,9 @@ h1 { margin: 0; font-size: 23px; line-height: 1.2; }
 .chat-bubble.user { margin-left: auto; color: #fff; background: linear-gradient(135deg,#6d5dfc,#3f74e8); border-bottom-right-radius: 4px; }
 .chat-bubble.assistant { margin-right: auto; color: #2c3852; background: #f1f2f8; border-bottom-left-radius: 4px; }
 .align-list { margin-top: 4px; }
-.align-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; padding: 8px 9px; border-radius: 9px; background: #f5f6fa; transition: background .12s; }
+.align-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; margin-top: 5px; padding: 8px 9px; border-radius: 9px; background: #f5f6fa; transition: background .12s; }
+.align-copy { padding: 3px 9px; font-size: 11px; white-space: nowrap; }
+.align-copy-head { margin: 0; color: #6b7280; font-size: 11px; font-weight: 700; text-align: center; }
 .align-row:first-child { margin-top: 6px; }
 .align-row:hover { background: #e6eefb; }
 .align-target { margin: 0; color: #20283a; font-size: 12.5px; line-height: 1.5; }
