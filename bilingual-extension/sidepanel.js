@@ -520,21 +520,22 @@ function renderBiRows(pairs) {
   pairs.forEach((p) => {
     const row = document.createElement("div");
     row.className = "bi-row";
+    // 外语：只读（你不懂外语，不在这改）。点一下把整行标记住，方便挑句。
     const left = document.createElement("div");
     left.className = "bi-cell bi-target";
-    left.contentEditable = "true";
-    left.spellcheck = false;
     left.textContent = p.target || "";
-    left.addEventListener("input", syncTargetFromSplit);
-    const right = document.createElement("div");
-    right.className = "bi-cell bi-zh";
-    right.textContent = p.chinese || "";
-    // 点中文（或整行）→ 把这一行标记住（持久高亮），一眼知道要复制哪句外语
-    right.addEventListener("click", () => {
+    left.addEventListener("click", () => {
       const on = row.classList.contains("bi-picked");
       box.querySelectorAll(".bi-row.bi-picked").forEach((r) => r.classList.remove("bi-picked"));
       if (!on) row.classList.add("bi-picked");
     });
+    // 中文：可改（你要改就改这边）。改完点「按中文改写外语」让 AI 重新生成。
+    const right = document.createElement("div");
+    right.className = "bi-cell bi-zh";
+    right.contentEditable = "true";
+    right.spellcheck = false;
+    right.textContent = p.chinese || "";
+    right.addEventListener("input", syncChineseFromSplit);
     // 单句复制：只想用其中一句外语时，直接复制这一句
     const copy = document.createElement("button");
     copy.className = "bi-copy";
@@ -551,6 +552,54 @@ function renderBiRows(pairs) {
     row.append(left, right, copy);
     box.appendChild(row);
   });
+}
+
+// 中文格被编辑后，把整条中文同步回隐藏载体（供「按中文改写」用）
+function syncChineseFromSplit() {
+  const cells = document.querySelectorAll("#bi-split .bi-zh");
+  const joined = Array.from(cells)
+    .map((c) => c.textContent.trim())
+    .filter(Boolean)
+    .join(" ");
+  replyChineseInput.value = joined;
+}
+
+// 按（你改过的）中文重新改写外语回复——是「改写」不是直译，再自动逐句对齐。
+async function rewriteFromChinese() {
+  syncChineseFromSplit();
+  const zh = replyChineseInput.value.trim();
+  if (!zh) return;
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const btn = document.getElementById("rewrite-from-zh");
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "改写中…";
+  errorBox.classList.add("hidden");
+  const redText = messageInput.value.trim();
+  const pickedLang = (replyLanguageSelect?.value || "").trim();
+  try {
+    const body = await postRewrite({
+      direction: "chinese_to_target",
+      message: redText,
+      context: redText,
+      productId: productSelect.value,
+      replyLanguage: pickedLang || (redText ? "" : (targetLanguage?.value || "").trim()),
+      replyChinese: zh
+    });
+    replyTargetInput.value = body.reply_target || "";
+    replyChineseInput.value = body.reply_chinese || zh;
+    renderBilingualSplit(replyTargetInput.value, replyChineseInput.value);
+  } catch (e) {
+    errorBox.textContent = e.name === "TimeoutError" ? "超时，请重试。" : e.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 function renderBilingualSplit(target, chinese) {
@@ -2146,6 +2195,61 @@ async function askMeaningTranslate() {
   }
 }
 
+// 「这是什么意思」：永远先用扫描工具读当前对话框（最全），再结合你粘贴的原文，
+// 让 AI 以信息更全的一方为准，逐句讲清 + 点出潜台词。哪怕你没贴任何东西也能用。
+async function explainMeaning() {
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const btn = document.getElementById("ask-meaning");
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "AI 解读中…";
+  errorBox.classList.add("hidden");
+  try {
+    const pasted = messageInput.value.trim();          // 你手动贴的原文（可能没贴/不全）
+    const scanned = await getConversationContext();      // 自动扫描当前对话框（通常最全）
+    if (!pasted && !scanned) {
+      errorBox.textContent = "在 IG 打开这个对话，或把外语贴进第一框，再点这里。";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    // 两份资料都给 AI，并说明：以信息更全的一方为准
+    let message, context;
+    if (pasted && scanned) {
+      message = pasted;
+      context =
+        "【工具自动扫描当前对话框（通常更全）】\n" + scanned +
+        "\n\n【运营手动粘贴的原文】\n" + pasted;
+    } else {
+      message = pasted || scanned;
+      context = "";
+    }
+    const question =
+      "请用大白话中文逐句讲清楚红人最近的消息是什么意思，并点出可能的言外之意/潜台词。" +
+      "下面可能同时给你两份资料：工具自动扫描当前对话框得到的完整对话、以及运营手动粘贴的原文。" +
+      "请先判断哪一份信息更全，以更全的一方为准来理解；通常自动扫描的更全，" +
+      "但若手动粘贴里有扫描中没有的内容，则把两者结合、以信息更全为准。";
+    const res = await fetch(`${API_BASE}/api/ask`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ question, message, context, productId: productSelect.value }),
+      signal: AbortSignal.timeout(50000)
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "AI 解读失败");
+    showAskAnswer(body.answer || "（没有内容）");
+  } catch (e) {
+    errorBox.textContent = e.name === "TimeoutError" ? "AI 超时，请重试。" : e.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
 async function askAboutMessage(mode) {
   // 「这是什么意思」看的是红人原文（第一框优先）；「这怎么办」的疑问写在第二框
   const text = mode === "meaning"
@@ -2370,7 +2474,8 @@ chatInput.addEventListener("keydown", (event) => {
 });
 document.getElementById("do-faithful").addEventListener("click", () => doReply("faithful"));
 document.getElementById("do-polish").addEventListener("click", () => doReply("polish"));
-document.getElementById("ask-meaning").addEventListener("click", () => askAboutMessage("meaning"));
+document.getElementById("ask-meaning").addEventListener("click", explainMeaning);
+document.getElementById("rewrite-from-zh").addEventListener("click", rewriteFromChinese);
 document.getElementById("ask-howto").addEventListener("click", () => askAboutMessage("howto"));
 document.getElementById("ask-copy").addEventListener("click", () => {
   const t = document.getElementById("ask-answer-text").textContent || "";

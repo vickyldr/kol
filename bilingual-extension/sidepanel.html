@@ -187,9 +187,10 @@
                 <button data-copy-value="reply-target">复制全部外语</button>
               </div>
             </div>
-            <div class="bi-split-head"><span>外语（可改）</span><span>中文对照</span><span>单句</span></div>
+            <div class="bi-split-head"><span>外语</span><span>中文（可改）</span><span>单句</span></div>
             <div id="bi-split" class="bi-split"></div>
-            <p class="bi-hint">每句自动对齐 · 鼠标移到一行两边对应高亮 · 点中文标记该行 · 点「复制」只拿这一句</p>
+            <p class="bi-hint">每句自动对齐 · 鼠标移到一行两边对应高亮 · 点外语标记该行 · 点「复制」只拿这一句</p>
+            <button id="rewrite-from-zh" class="secondary" type="button">✅ 按修改后的中文改写外语</button>
             <div class="reply-toolbar">
               <label class="reply-language-label">回复语言
                 <select id="reply-language" class="reply-language-select">
@@ -217,8 +218,8 @@
 
           <!-- 2. 改写 / 写中文意图（合并原来的润色 + 逐句改） -->
           <article class="card rewrite-card">
-            <span class="card-label">想改？写一句（中文）</span>
-            <textarea id="rewrite-box" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 主语翻反了，是对方让我发发票 / 别提价格。也可以直接写你的中文意图让 AI 生成。"></textarea>
+            <span class="card-label">或：写一句话让 AI 改（语气 / 长度 / 口径）</span>
+            <textarea id="rewrite-box" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 主语翻反了，是对方让我发发票 / 别提价格。&#10;（想自己改意思，直接在上面中文格里改，再点「按修改后的中文改写外语」）"></textarea>
             <button id="rewrite-go" class="editor-tool primary">让 AI 改 / 生成双语</button>
             <p id="rewrite-status" class="refine-status hidden"></p>
           </article>
