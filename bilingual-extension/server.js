@@ -448,6 +448,35 @@ ${REPLY_STYLE}`;
   );
 }
 
+// 快出回复：只生成「外语回复 + 中文对照」，不做完整分析，追求 3-5 秒先出。
+async function quickReply(payload) {
+  const product = findProduct(payload.productId);
+  const systemPrompt = `你是中国 KOL 运营的双语回复助手。根据红人的消息和运营的回复意图，
+直接给出一条可以发出去的对外回复（红人所用语言）+ 中文对照。只出回复，不做分析、不写内部建议。
+语言规则：reply_target 必须用红人原消息的语言（detected_language）；红人没用英语就别用英语。
+不要编造价格、日期、授权、平台、付款时间、链接等必须由人确认的信息，缺就留占位或不提。
+${REPLY_STYLE}
+只返回 JSON：{"detected_language":"语言","reply_target":"外语回复","reply_chinese":"中文对照"}。`;
+  const result = await callQwen({
+    system: systemPrompt,
+    user: JSON.stringify({
+      selected_product: product ? { id: product.id, name: product.name } : null,
+      creator_message: payload.message || "",
+      conversation_context: payload.context || "",
+      operator_goal: payload.operatorGoal || "",
+      reply_language: payload.replyLanguage || ""
+    }),
+    maxTokens: 600,
+    temperature: 0.2,
+    model: MODEL_FAST
+  });
+  return {
+    detected_language: String(result.detected_language || "").trim(),
+    reply_target: String(result.reply_target || "").trim(),
+    reply_chinese: String(result.reply_chinese || "").trim()
+  };
+}
+
 async function translateFaithfully(text) {
   const cacheKey = hashKey("translate:" + text);
   const cached = translateCache.get(cacheKey);
@@ -1068,6 +1097,14 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "单条消息过长。" });
       }
       return json(res, 200, await translateFaithfully(text));
+    }
+
+    if (req.method === "POST" && req.url === "/api/reply") {
+      const payload = await readBody(req);
+      if (!String(payload.message || "").trim() && !String(payload.operatorGoal || "").trim()) {
+        return json(res, 400, { error: "请先提供红人的消息或你的回复意图。" });
+      }
+      return json(res, 200, await quickReply(payload));
     }
 
     if (req.method === "POST" && req.url === "/api/judge") {

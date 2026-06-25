@@ -466,8 +466,12 @@ function renderAnalysis(analysis) {
     "implied-meaning",
     `可能的言外之意（${analysis.implication_confidence || "low"}）：${analysis.implied_meaning || "无明显言外之意"}`
   );
-  setValue("reply-target", analysis.reply_target);
-  setValue("reply-zh", analysis.reply_chinese);
+  // 回复由快接口(/api/reply)负责并渲染到分屏；这里只在回复还空着时兜底填上。
+  if (analysis.reply_target && !replyTargetInput.value) {
+    setValue("reply-target", analysis.reply_target);
+    setValue("reply-zh", analysis.reply_chinese);
+    renderBilingualSplit(analysis.reply_target, analysis.reply_chinese);
+  }
   setText("alternative-target", analysis.alternative_target);
   setText("alternative-zh", analysis.alternative_chinese);
   setText("risk", analysis.risk_warning);
@@ -489,6 +493,50 @@ function renderAnalysis(analysis) {
 
   emptyState.classList.add("hidden");
   result.classList.remove("hidden");
+}
+
+// 把一段文字按句切分（中英标点 + 换行），用于左右分屏逐句对齐
+function splitSentences(s) {
+  return String(s || "")
+    .split(/(?<=[。.!?！？；;\n])/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+// 渲染「外语 | 中文」左右分屏：逐句一行，悬停整行高亮；外语可直接改。
+function renderBilingualSplit(target, chinese) {
+  const box = document.getElementById("bi-split");
+  if (!box) return;
+  box.replaceChildren();
+  const ts = splitSentences(target);
+  const zs = splitSentences(chinese);
+  const n = Math.max(ts.length, zs.length, 1);
+  for (let i = 0; i < n; i += 1) {
+    const row = document.createElement("div");
+    row.className = "bi-row";
+    const left = document.createElement("div");
+    left.className = "bi-cell bi-target";
+    left.contentEditable = "true";
+    left.spellcheck = false;
+    left.textContent = ts[i] || "";
+    left.addEventListener("input", syncTargetFromSplit);
+    const right = document.createElement("div");
+    right.className = "bi-cell bi-zh";
+    right.textContent = zs[i] || "";
+    row.append(left, right);
+    box.appendChild(row);
+  }
+}
+
+// 外语格被编辑后，把整条外语回复同步回隐藏数据载体（供复制/保存/改写）
+function syncTargetFromSplit() {
+  const cells = document.querySelectorAll("#bi-split .bi-target");
+  const joined = Array.from(cells)
+    .map((c) => c.textContent.trim())
+    .filter(Boolean)
+    .join(" ");
+  replyTargetInput.value = joined;
+  if (lastAnalysis) lastAnalysis.reply_target = joined;
 }
 
 function renderArchive(records) {
@@ -756,6 +804,58 @@ async function postRewrite(payload) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "双语回复生成失败。");
   return body;
+}
+
+// 改写/生成（合并原来的「润色生成」「让 AI 改这条」）：
+// 有回复就按你写的改；还没回复就把你写的当中文意图生成双语。结果更新到上方分屏。
+async function rewriteGo() {
+  const box = document.getElementById("rewrite-box");
+  const text = box.value.trim();
+  if (!text) { box.focus(); return; }
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const button = document.getElementById("rewrite-go");
+  const status = document.getElementById("rewrite-status");
+  const orig = button.textContent;
+  button.disabled = true;
+  button.textContent = "AI 处理中…";
+  status.classList.add("hidden");
+  status.classList.remove("error");
+  try {
+    const hasReply = replyTargetInput.value.trim();
+    const body = await postRewrite({
+      direction: hasReply ? "refine" : "chinese_to_target",
+      message: messageInput.value.trim(),
+      context: contextInput.value.trim(),
+      operatorGoal: operatorGoalInput.value.trim(),
+      productId: productSelect.value,
+      detectedLanguage: lastAnalysis?.detected_language || "",
+      replyLanguage: replyLanguageSelect?.value || "",
+      replyTarget: replyTargetInput.value.trim(),
+      replyChinese: hasReply ? replyChineseInput.value.trim() : text,
+      modification: text
+    });
+    replyTargetInput.value = body.reply_target || replyTargetInput.value;
+    replyChineseInput.value = body.reply_chinese || replyChineseInput.value;
+    renderBilingualSplit(replyTargetInput.value, replyChineseInput.value);
+    if (lastAnalysis) {
+      lastAnalysis.reply_target = replyTargetInput.value;
+      lastAnalysis.reply_chinese = replyChineseInput.value;
+    }
+    box.value = "";
+    status.textContent = "已更新 ↑";
+    status.classList.remove("hidden", "error");
+  } catch (error) {
+    status.textContent = error.name === "TimeoutError" ? "超时，请重试。" : error.message;
+    status.classList.remove("hidden");
+    status.classList.add("error");
+  } finally {
+    button.disabled = false;
+    button.textContent = orig;
+  }
 }
 
 // 板块 A 的改写：中文意图→双语，或外语→中文校对。
@@ -1785,49 +1885,76 @@ async function analyze() {
 
   errorBox.classList.add("hidden");
   analyzeButton.disabled = true;
-  analyzeButton.textContent = serviceOnline ? "千问分析中…" : "离线匹配中…";
-  let waitedSeconds = 0;
-  if (serviceOnline) {
-    waitTimer = setInterval(() => {
-      waitedSeconds += 1;
-      analyzeButton.textContent = `千问分析中 ${waitedSeconds}s`;
-    }, 1000);
-  }
+  analyzeButton.textContent = serviceOnline ? "生成回复中…" : "离线匹配中…";
 
-  try {
-    if (!serviceOnline) {
-      renderAnalysis(localFallback(message));
-      errorBox.textContent =
-        "千问服务未启动，当前显示离线结果。请双击 start-assistant.cmd 后重试。";
-      errorBox.classList.remove("hidden");
-      return;
-    }
-
-    const response = await fetch(`${API_BASE}/api/analyze`, {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        message,
-        productId: productSelect.value,
-        context: contextInput.value.trim(),
-        operatorGoal: operatorGoalInput.value.trim(),
-        channel: "Instagram"
-      }),
-      signal: AbortSignal.timeout(65000)
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || "千问分析失败。");
-    renderAnalysis(body);
-  } catch (error) {
+  if (!serviceOnline) {
     renderAnalysis(localFallback(message));
     errorBox.textContent =
-      error.name === "TimeoutError"
-        ? "千问超过 65 秒仍未返回，已显示离线结果。请稍后重试。"
-        : `${error.message} 已显示离线结果。`;
+      "千问服务未启动，当前显示离线结果。请双击 start-assistant.cmd 后重试。";
     errorBox.classList.remove("hidden");
+    analyzeButton.disabled = false;
+    analyzeButton.textContent = "分析并建议回复";
+    return;
+  }
+
+  const payload = {
+    message,
+    productId: productSelect.value,
+    context: contextInput.value.trim(),
+    operatorGoal: operatorGoalInput.value.trim(),
+    replyLanguage: replyLanguageSelect?.value || "",
+    channel: "Instagram"
+  };
+
+  // 清空旧结果，先把结果区露出来 + 显示"生成中"
+  replyTargetInput.value = "";
+  replyChineseInput.value = "";
+  const biBox = document.getElementById("bi-split");
+  if (biBox) biBox.innerHTML = '<div class="bi-loading">正在生成回复…</div>';
+  const summary = document.getElementById("analysis-summary");
+  if (summary) summary.textContent = "识别 & 内部提醒（分析中…）";
+  emptyState.classList.add("hidden");
+  result.classList.remove("hidden");
+
+  // 阶段 1：快出「外语回复 + 中文」（追求 3-5 秒）
+  const replyP = fetch(`${API_BASE}/api/reply`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30000)
+  })
+    .then((r) => r.json())
+    .then((b) => {
+      if (b && b.reply_target) {
+        replyTargetInput.value = b.reply_target;
+        replyChineseInput.value = b.reply_chinese || "";
+        renderBilingualSplit(b.reply_target, b.reply_chinese || "");
+      }
+    })
+    .catch(() => {});
+
+  // 阶段 2：完整分析（后台补到下方折叠区，不阻塞回复）
+  fetch(`${API_BASE}/api/analyze`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(65000)
+  })
+    .then((r) => r.json())
+    .then((b) => {
+      if (b && !b.error) renderAnalysis(b);
+      if (summary) summary.textContent = "识别 & 内部提醒";
+    })
+    .catch(() => {
+      if (summary) summary.textContent = "识别 & 内部提醒（分析未完成）";
+    });
+
+  try {
+    await replyP; // 回复一出来就解禁按钮
+    if (!replyTargetInput.value && biBox) {
+      biBox.innerHTML = '<div class="bi-loading">回复生成较慢，分析结果会稍后补上…</div>';
+    }
   } finally {
-    if (waitTimer) clearInterval(waitTimer);
-    waitTimer = null;
     analyzeButton.disabled = false;
     analyzeButton.textContent = "分析并建议回复";
   }
@@ -1944,17 +2071,7 @@ templateSelect.addEventListener("change", () => {
   );
   if (template) selectQuickTemplate(template);
 });
-document
-  .getElementById("translate-to-chinese")
-  .addEventListener("click", () => rewriteReply("target_to_chinese"));
-document
-  .getElementById("generate-from-chinese")
-  .addEventListener("click", () => rewriteReply("chinese_to_target"));
-document
-  .getElementById("faithful-from-chinese")
-  .addEventListener("click", () => rewriteReply("faithful"));
-document.getElementById("refine-reply").addEventListener("click", refineReply);
-document.getElementById("align-reply").addEventListener("click", alignReplyAction);
+document.getElementById("rewrite-go").addEventListener("click", rewriteGo);
 document
   .getElementById("save-scenario")
   .addEventListener("click", () => openSaveDialog(reactiveSaveCtx()));
