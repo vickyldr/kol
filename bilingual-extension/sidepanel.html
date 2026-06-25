@@ -15,6 +15,7 @@
         </div>
         <div class="header-actions">
           <button id="open-guide" class="status archive-entry" title="新手怎么用">❓</button>
+          <button id="open-reminders" class="status archive-entry" title="待回复 / 待跟进 / 待办提醒">🔔 提醒</button>
           <button id="open-archive" class="status archive-entry" title="查看已保存的话术库">📚 话术库</button>
           <button id="open-assets" class="status archive-entry" title="logo / 教程图 / 链接等物料">📎 物料库</button>
           <button id="service-status" class="status" title="点击重新检测">检测中</button>
@@ -52,6 +53,41 @@
           <li><b>💬 问 AI</b>：像 ChatGPT 一样随便问。<br />翻译、砍价思路、合作流程、这句啥意思、这个红人值不值得合作……</li>
         </ul>
         <p class="guide-tip">顶部还有：<b>📚 话术库</b>（已存好的话术）、<b>📎 物料库</b>（logo / 教程图 / 链接）、<b>❓</b>（再看本指引）。<br />⚠️ 紫色「内部处理建议」是给你自己看的，<b>别发给红人</b>。</p>
+      </section>
+
+      <section id="reminder-panel" class="reminder-panel hidden">
+        <div class="reminder-head">
+          <strong>🔔 提醒</strong>
+          <button id="reminder-close" type="button">收起</button>
+        </div>
+
+        <details class="reminder-settings">
+          <summary>⚙️ 身份设置（认我方 vs 红人）</summary>
+          <label for="my-product">我是哪个产品的（话术默认这个）</label>
+          <select id="my-product"></select>
+          <label for="my-handle">我的 IG 用户名（登录后可自动认出，也可手填）</label>
+          <input id="my-handle" type="text" placeholder="例如 recco_anna" />
+          <label for="product-prefixes">产品前缀清单（逗号分隔，用来认同事）</label>
+          <input id="product-prefixes" type="text" placeholder="recco, rythmix, aicatch, vivavideo" />
+          <label class="reminder-toggle"><input id="reminder-enabled" type="checkbox" checked /> 开启提醒采集（IG 私信页搭便车读屏）</label>
+          <button id="save-reminder-settings" type="button" class="primary">保存设置</button>
+          <p id="reminder-settings-status" class="template-status hidden"></p>
+        </details>
+
+        <div class="reminder-add">
+          <input id="todo-text" type="text" placeholder="加个待办，例如：周五给 @Anna 发新品" />
+          <input id="todo-due" type="datetime-local" />
+          <button id="add-todo" type="button" class="secondary">＋ 加待办</button>
+        </div>
+
+        <div id="reminder-list" class="reminder-list">
+          <p class="reminder-empty">暂无提醒。打开 IG 私信刷一刷，这里会自动出现「待回复 / 待跟进」。</p>
+        </div>
+
+        <details class="reminder-muted">
+          <summary>🔕 已静音的群</summary>
+          <div id="muted-list" class="muted-list"></div>
+        </details>
       </section>
 
       <nav class="mode-tabs">

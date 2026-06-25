@@ -429,6 +429,81 @@ async function translateFaithfully(text) {
   };
 }
 
+// 提醒判断：读一段对话的最近几条消息，判断红人有没有在等我回、
+// 处在哪个推进阶段、有没有口头答应却没推进、要不要跟进、有没有约 DDL。
+// 一切只读对话文本（由插件搭便车采集），不碰 IG 账号。
+async function judgeThread(payload) {
+  const messages = Array.isArray(payload.messages) ? payload.messages : [];
+  const systemPrompt = `你是中国 KOL 运营团队的 AI 助理，帮运营盯住每个红人对话有没有“该我处理却被漏掉”的情况。
+你只会看到一段对话最近的几条消息。每条消息标了 from：
+- "me"：运营本人发的；
+- "colleague"：同一团队别的同事发的（账号通常以产品名开头，如 recco / rythmix / aicatch / vivavideo）；
+- "creator"：红人（合作的创作者）发的。
+
+关键判断规则：
+1. 只有 from="me" 才算“我回过了”。同事(colleague)说话【绝不】算我处理了——一个群一般只由一个同事对接，别的同事插话通常是别的事，我照样得自己跟进。
+2. 寒暄收尾要识别：如果红人最后只是“ok / thanks / 谢谢 / 👍”这类客套收尾，且没有待办，needs_my_reply 和 needs_follow_up 都为 false，is_pleasantry=true。
+3. KOL 合作推进有固定节点，每个节点我都在“等红人交某样东西”。红人只是口头答应(“ok / sure / 好的”)但东西一直没给，就要跟进。节点与建议跟进时间：
+   - 触达后：等红人回应是否有兴趣 —— 2 天没回提醒催回复
+   - 询价后：等报价 / 档期 —— 2 天
+   - 要账号后：等红人给 IG handle / 账号 ID（常见“说 ok 却一直不给”）—— 1 天
+   - 要合同信息后：等收款 / 合同信息 —— 2 天
+   - 约定初稿：等初稿（到约定交稿日）—— 到期当天或超 1 天
+   - 发了修改意见：等修改稿 —— 2 天
+   - 审核通过后：等发布 + 帖子链接 —— 2 天
+4. 不完全拘泥节点表：如果你发现节点表之外、但明显会拖黄或需要运营留意的情况（如红人说要出差/旅行可能延期、反问了一个没人回答的问题、提出了新的条件），写进 ai_note 提醒运营。
+5. DDL 判断：如果当前阶段本该有一个明确的交付时间（如已答应合作/已答应做视频），但整段对话里【从没约定过交稿时间】，should_ask_deadline=true，并给一句可以直接问红人的话术（用红人所用语言，附中文）。否则 should_ask_deadline=false。
+6. 不要编造价格、日期、授权、付款等必须由人确认的信息。
+7. 只返回 JSON，不要额外文字。`;
+
+  const outputContract = {
+    is_pleasantry: "true|false：红人最后是否只是寒暄收尾、无需动作",
+    needs_my_reply: "true|false：红人是否在等我本人(me)回复",
+    stage: "当前合作阶段的简短中文描述",
+    waiting_for: "我正在等红人交的东西；没有则空字符串",
+    needs_follow_up: "true|false：是否该跟进红人（我发了/口头答应了但没推进）",
+    follow_up_after_days: "数字：从最后一条我方消息算，几天没动静就该提醒",
+    has_deadline: "true|false：当前阶段是否已经约定了明确的交付/交稿时间",
+    should_ask_deadline: "true|false：该不该提示运营去问红人要个 DDL",
+    suggested_ask_deadline_text:
+      "should_ask_deadline 为 true 时，给一句可直接发给红人问档期/约交稿的话（红人所用语言）+（中文对照）；否则空字符串",
+    reminder_label: "给运营看的一句话提醒，说清楚该对谁做什么；不需要提醒则空字符串",
+    ai_note: "节点表之外值得运营留意的事；没有则空字符串"
+  };
+
+  const result = await callQwen({
+    system: systemPrompt,
+    user: JSON.stringify({
+      output_contract: outputContract,
+      is_group: Boolean(payload.isGroup),
+      creator_name: payload.creatorName || "",
+      product_id: payload.productId || "",
+      recent_messages: messages.slice(-12)
+    }),
+    maxTokens: 700,
+    temperature: 0.1
+  });
+
+  const toBool = (v) => v === true || v === "true";
+  let days = Number(result.follow_up_after_days);
+  if (!Number.isFinite(days) || days < 0) days = 2;
+  return {
+    is_pleasantry: toBool(result.is_pleasantry),
+    needs_my_reply: toBool(result.needs_my_reply),
+    stage: String(result.stage || "").trim(),
+    waiting_for: String(result.waiting_for || "").trim(),
+    needs_follow_up: toBool(result.needs_follow_up),
+    follow_up_after_days: days,
+    has_deadline: toBool(result.has_deadline),
+    should_ask_deadline: toBool(result.should_ask_deadline),
+    suggested_ask_deadline_text: String(
+      result.suggested_ask_deadline_text || ""
+    ).trim(),
+    reminder_label: String(result.reminder_label || "").trim(),
+    ai_note: String(result.ai_note || "").trim()
+  };
+}
+
 async function askQwen(payload) {
   const product = findProduct(payload.productId);
   const result = await callQwen({
@@ -916,6 +991,14 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "单条消息过长。" });
       }
       return json(res, 200, await translateFaithfully(text));
+    }
+
+    if (req.method === "POST" && req.url === "/api/judge") {
+      const payload = await readBody(req);
+      if (!Array.isArray(payload.messages) || !payload.messages.length) {
+        return json(res, 400, { error: "缺少对话消息。" });
+      }
+      return json(res, 200, await judgeThread(payload));
     }
 
     if (req.method === "POST" && req.url === "/api/ask") {

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "KOL 双语沟通助手",
-  "version": "0.19.2",
-  "description": "理解红人消息、匹配内部话术并生成双语回复建议。",
-  "permissions": ["activeTab", "contextMenus", "sidePanel", "storage"],
+  "version": "0.20.0",
+  "description": "理解红人消息、匹配内部话术并生成双语回复建议，并提醒待回复 / 待跟进的红人。",
+  "permissions": ["activeTab", "contextMenus", "sidePanel", "storage", "alarms", "notifications"],
   "host_permissions": [
     "http://127.0.0.1:3210/*",
     "http://106.54.206.174/*",
@@ -23,15 +23,25 @@
         "https://outlook.live.com/*",
         "https://outlook.office.com/*"
       ],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "js": ["content.js", "kol-reminder.js"],
+      "css": ["content.css", "kol-reminder.css"],
       "run_at": "document_idle"
     }
   ],
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "action": {
-    "default_title": "打开 KOL 双语沟通助手"
+    "default_title": "打开 KOL 双语沟通助手",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   }
 }

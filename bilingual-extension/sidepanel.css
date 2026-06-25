@@ -202,3 +202,35 @@ dialog::backdrop { background: rgba(20,24,36,.4); }
 .divider { height: 1px; margin: 11px 0; background: #e9ebf2; }
 #missing-information { margin: 8px 0 0; padding-left: 19px; font-size: 13px; line-height: 1.6; }
 .primary:disabled { cursor: wait; opacity: .65; }
+
+/* ===== KOL 提醒面板 ===== */
+.reminder-panel { margin: 10px 0; padding: 12px; border: 1px solid #e9ebf2; border-radius: 12px; background: #fbfcff; }
+.reminder-panel.hidden { display: none; }
+.reminder-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.reminder-head strong { font-size: 15px; }
+.reminder-head button { border: none; background: #eef1f8; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+.reminder-settings, .reminder-muted { margin: 8px 0; }
+.reminder-settings summary, .reminder-muted summary { cursor: pointer; font-size: 13px; color: #5a6072; }
+.reminder-settings label { display: block; margin: 8px 0 3px; font-size: 12px; color: #5a6072; }
+.reminder-settings input[type="text"], .reminder-settings select { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid #d8dced; border-radius: 8px; font-size: 13px; }
+.reminder-toggle { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; }
+.reminder-toggle input { width: auto; }
+.reminder-add { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.reminder-add input[type="text"] { flex: 1 1 160px; padding: 7px 9px; border: 1px solid #d8dced; border-radius: 8px; font-size: 13px; }
+.reminder-add input[type="datetime-local"] { flex: 0 0 auto; padding: 6px; border: 1px solid #d8dced; border-radius: 8px; font-size: 12px; }
+.reminder-list { display: flex; flex-direction: column; gap: 8px; }
+.reminder-empty { color: #8b90a0; font-size: 13px; }
+.reminder-group-title { font-size: 12px; font-weight: 700; color: #5a6072; margin: 6px 0 2px; }
+.reminder-card { border: 1px solid #e9ebf2; border-left: 3px solid #e0245e; border-radius: 10px; padding: 9px 11px; background: #fff; }
+.reminder-card.follow { border-left-color: #d9a93c; }
+.reminder-card.todo { border-left-color: #4a8cff; }
+.reminder-card .rc-title { font-weight: 600; font-size: 14px; }
+.reminder-card .rc-label { font-size: 13px; color: #384056; margin: 3px 0; }
+.reminder-card .rc-meta { font-size: 11px; color: #8b90a0; }
+.reminder-card .rc-ai { font-size: 12px; color: #6b4a9a; margin-top: 4px; }
+.reminder-card .rc-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.reminder-card .rc-actions button { border: 1px solid #d8dced; background: #f4f6fb; border-radius: 999px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
+.reminder-card .rc-actions button:hover { background: #e8ecf6; }
+.muted-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.muted-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #5a6072; }
+.muted-row button { border: 1px solid #d8dced; background: #f4f6fb; border-radius: 8px; padding: 2px 8px; cursor: pointer; }

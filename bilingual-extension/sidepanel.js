@@ -2130,3 +2130,263 @@ loadConfig().then(() => {
   checkService();
 });
 initGuide();
+
+// ====================== KOL 提醒面板 ======================
+(function () {
+  const DEFAULT_PREFIXES = ["recco", "rythmix", "aicatch", "vivavideo"];
+  const SETTINGS_KEY = "kolReminderSettings";
+  const panel = document.getElementById("reminder-panel");
+  if (!panel) return;
+
+  const openBtn = document.getElementById("open-reminders");
+  const closeBtn = document.getElementById("reminder-close");
+  const listEl = document.getElementById("reminder-list");
+  const mutedEl = document.getElementById("muted-list");
+  const myProductSel = document.getElementById("my-product");
+  const myHandleInput = document.getElementById("my-handle");
+  const prefixInput = document.getElementById("product-prefixes");
+  const enabledInput = document.getElementById("reminder-enabled");
+  const settingsStatus = document.getElementById("reminder-settings-status");
+
+  function nowIso() { return new Date().toISOString(); }
+  function daysSince(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return 0;
+    return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+  }
+  function threadUrl(id) { return `https://www.instagram.com/direct/t/${id}/`; }
+
+  async function getLocal(keys) { return chrome.storage.local.get(keys); }
+  async function setLocal(obj) { return chrome.storage.local.set(obj); }
+
+  // —— 身份设置 ——
+  async function loadSettings() {
+    const s = (await getLocal(SETTINGS_KEY))[SETTINGS_KEY] || {};
+    // 我的产品下拉：克隆主产品下拉 + 一个空选项
+    myProductSel.replaceChildren();
+    const blank = document.createElement("option");
+    blank.value = ""; blank.textContent = "（未选）";
+    myProductSel.appendChild(blank);
+    Array.from(document.getElementById("product").options).forEach((o) => {
+      if (o.value === "generic") return;
+      const opt = document.createElement("option");
+      opt.value = o.value; opt.textContent = o.textContent;
+      myProductSel.appendChild(opt);
+    });
+    myProductSel.value = s.myProduct || "";
+    myHandleInput.value = s.myHandle || "";
+    prefixInput.value = (s.productPrefixes || DEFAULT_PREFIXES).join(", ");
+    enabledInput.checked = s.enabled !== false;
+  }
+
+  document.getElementById("save-reminder-settings").addEventListener("click", async () => {
+    const prefixes = prefixInput.value.split(/[,，\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const next = {
+      enabled: enabledInput.checked,
+      myProduct: myProductSel.value || "",
+      myHandle: myHandleInput.value.trim().replace(/^@/, ""),
+      productPrefixes: prefixes.length ? prefixes : DEFAULT_PREFIXES.slice()
+    };
+    await setLocal({ [SETTINGS_KEY]: next });
+    settingsStatus.textContent = "已保存 ✓";
+    settingsStatus.classList.remove("hidden");
+    setTimeout(() => settingsStatus.classList.add("hidden"), 1500);
+  });
+
+  // —— 计算提醒清单（与后台一致） ——
+  function computeItems(threads, todos) {
+    const items = [];
+    Object.values(threads || {}).forEach((rec) => {
+      if (!rec || rec.muted) return;
+      const j = rec.judge || {};
+      const title = rec.title || rec.creatorName || rec.threadId;
+      const sig = rec.judgeSignature || "";
+      if (rec.needsReplyRaw && j.is_pleasantry !== true && rec.replyDismissedSig !== sig) {
+        items.push({
+          kind: "reply", threadId: rec.threadId, isGroup: rec.isGroup, title,
+          label: j.reminder_label || `等你回复`,
+          ai: j.ai_note || "",
+          meta: `已搁置约 ${daysSince(rec.firstUnrepliedAt || rec.lastSeenAt)} 天 · 上次看到 ${fmt(rec.lastSeenAt)}`
+        });
+      }
+      if (j.needs_follow_up && j.is_pleasantry !== true && rec.followDismissedSig !== sig) {
+        const threshold = Number.isFinite(Number(j.follow_up_after_days)) ? Number(j.follow_up_after_days) : 2;
+        const elapsed = daysSince(rec.judgedAt || rec.lastSeenAt);
+        if (elapsed >= threshold) {
+          items.push({
+            kind: "follow", threadId: rec.threadId, isGroup: rec.isGroup, title,
+            label: j.reminder_label || `该跟进：${j.waiting_for || ""}`,
+            ai: j.ai_note || "",
+            meta: `在等：${j.waiting_for || "—"} · 已 ${elapsed} 天`
+          });
+        }
+      }
+    });
+    (todos || []).forEach((t) => {
+      if (!t || t.done || t.dismissed) return;
+      const due = Date.parse(t.dueAt);
+      if (Number.isFinite(due) && due <= Date.now()) {
+        items.push({ kind: "todo", todoId: t.id, threadId: t.threadId || "", title: t.text, label: "", meta: `到点：${fmt(t.dueAt)}` });
+      }
+    });
+    return items;
+  }
+
+  function fmt(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return "—";
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+
+  // —— 渲染 ——
+  async function render() {
+    const store = await getLocal(["kolThreads", "kolTodos"]);
+    const threads = store.kolThreads || {};
+    const items = computeItems(threads, store.kolTodos || []);
+    listEl.replaceChildren();
+
+    if (!items.length) {
+      const p = document.createElement("p");
+      p.className = "reminder-empty";
+      p.textContent = "暂无提醒。打开 IG 私信刷一刷，这里会自动出现「待回复 / 待跟进」。";
+      listEl.appendChild(p);
+    } else {
+      const groups = [
+        ["reply", "📥 待回复（红人发了我没回）"],
+        ["follow", "⏳ 待跟进（口头答应没推进 / 该催）"],
+        ["todo", "📝 待办"]
+      ];
+      groups.forEach(([kind, name]) => {
+        const sub = items.filter((i) => i.kind === kind);
+        if (!sub.length) return;
+        const h = document.createElement("div");
+        h.className = "reminder-group-title";
+        h.textContent = `${name} · ${sub.length}`;
+        listEl.appendChild(h);
+        sub.forEach((it) => listEl.appendChild(card(it)));
+      });
+    }
+
+    // 静音群列表
+    mutedEl.replaceChildren();
+    const muted = Object.values(threads).filter((r) => r && r.muted);
+    if (!muted.length) {
+      const p = document.createElement("div");
+      p.className = "muted-row";
+      p.textContent = "（没有静音的群）";
+      mutedEl.appendChild(p);
+    } else {
+      muted.forEach((r) => {
+        const row = document.createElement("div");
+        row.className = "muted-row";
+        const span = document.createElement("span");
+        span.textContent = r.title || r.creatorName || r.threadId;
+        const btn = document.createElement("button");
+        btn.textContent = "取消静音";
+        btn.addEventListener("click", async () => { await patchThread(r.threadId, { muted: false }); });
+        row.append(span, btn);
+        mutedEl.appendChild(row);
+      });
+    }
+  }
+
+  function card(it) {
+    const el = document.createElement("div");
+    el.className = `reminder-card ${it.kind}`;
+    const t = document.createElement("div");
+    t.className = "rc-title";
+    t.textContent = (it.kind === "todo" ? "📝 " : "@") + (it.title || "");
+    el.appendChild(t);
+    if (it.label) {
+      const l = document.createElement("div");
+      l.className = "rc-label";
+      l.textContent = it.label;
+      el.appendChild(l);
+    }
+    if (it.ai) {
+      const a = document.createElement("div");
+      a.className = "rc-ai";
+      a.textContent = "🤖 " + it.ai;
+      el.appendChild(a);
+    }
+    const m = document.createElement("div");
+    m.className = "rc-meta";
+    m.textContent = it.meta || "";
+    el.appendChild(m);
+
+    const actions = document.createElement("div");
+    actions.className = "rc-actions";
+    if (it.threadId) {
+      actions.appendChild(btn("打开对话", () => chrome.tabs.create({ url: threadUrl(it.threadId) })));
+    }
+    if (it.kind === "reply") {
+      actions.appendChild(btn("不用提醒了", () => dismissThread(it.threadId, "reply")));
+    } else if (it.kind === "follow") {
+      actions.appendChild(btn("不用提醒了", () => dismissThread(it.threadId, "follow")));
+    } else if (it.kind === "todo") {
+      actions.appendChild(btn("完成", () => patchTodo(it.todoId, { done: true })));
+      actions.appendChild(btn("删除", () => patchTodo(it.todoId, { dismissed: true })));
+    }
+    if (it.isGroup && it.threadId) {
+      actions.appendChild(btn("🔕 这个群别再提醒", () => patchThread(it.threadId, { muted: true })));
+    }
+    el.appendChild(actions);
+    return el;
+  }
+
+  function btn(label, onClick) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  async function patchThread(id, patch) {
+    const store = await getLocal("kolThreads");
+    const map = store.kolThreads || {};
+    if (map[id]) { map[id] = { ...map[id], ...patch }; await setLocal({ kolThreads: map }); }
+  }
+  async function dismissThread(id, kind) {
+    const store = await getLocal("kolThreads");
+    const map = store.kolThreads || {};
+    if (map[id]) {
+      const sig = map[id].judgeSignature || "";
+      map[id][kind === "reply" ? "replyDismissedSig" : "followDismissedSig"] = sig;
+      await setLocal({ kolThreads: map });
+    }
+  }
+  async function patchTodo(id, patch) {
+    const store = await getLocal("kolTodos");
+    const todos = store.kolTodos || [];
+    const next = todos.map((t) => (t.id === id ? { ...t, ...patch } : t));
+    await setLocal({ kolTodos: next });
+  }
+
+  // —— 加待办 ——
+  document.getElementById("add-todo").addEventListener("click", async () => {
+    const text = document.getElementById("todo-text").value.trim();
+    const dueRaw = document.getElementById("todo-due").value;
+    if (!text) return;
+    let dueAt = nowIso();
+    if (dueRaw) { const d = new Date(dueRaw); if (!isNaN(d)) dueAt = d.toISOString(); }
+    const store = await getLocal("kolTodos");
+    const todos = store.kolTodos || [];
+    todos.push({ id: "t" + Date.now(), text, dueAt, done: false, dismissed: false });
+    await setLocal({ kolTodos: todos });
+    document.getElementById("todo-text").value = "";
+    document.getElementById("todo-due").value = "";
+  });
+
+  // —— 开关面板 ——
+  function openPanel() { panel.classList.remove("hidden"); loadSettings(); render(); panel.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  openBtn && openBtn.addEventListener("click", () => panel.classList.contains("hidden") ? openPanel() : panel.classList.add("hidden"));
+  closeBtn && closeBtn.addEventListener("click", () => panel.classList.add("hidden"));
+
+  // 记账本一变就重渲染（实时反映采集结果）
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && (changes.kolThreads || changes.kolTodos) && !panel.classList.contains("hidden")) {
+      render();
+    }
+  });
+})();
