@@ -53,6 +53,13 @@ const templateSelect = document.getElementById("template-select");
 const templateDescription = document.getElementById("template-description");
 const templateVariables = document.getElementById("template-variables");
 const targetLanguage = document.getElementById("target-language");
+// 记住「我主动发」上次用的输出语言，下次默认它
+chrome.storage.local.get("kolProactiveLang").then((s) => {
+  if (s.kolProactiveLang) targetLanguage.value = s.kolProactiveLang;
+});
+targetLanguage.addEventListener("change", () => {
+  chrome.storage.local.set({ kolProactiveLang: targetLanguage.value });
+});
 const generateTemplateButton = document.getElementById("generate-template");
 const templateStatus = document.getElementById("template-status");
 
