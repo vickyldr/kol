@@ -268,3 +268,9 @@ dialog::backdrop { background: rgba(20,24,36,.4); }
 #coop-import { width: 100%; box-sizing: border-box; border: 1px solid #d8cdf0; border-radius: 8px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fff; }
 .coop-done-btn { border: 1px solid #cdb8f0; background: #f3edff; color: #5a4a8a; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
 .coop-done-btn:hover { background: #e9deff; }
+/* 三合一：隐藏旧的三个 tab，单列展示 */
+.mode-tabs { display: none !important; }
+.ask-row { margin-top: 6px; }
+.ask-answer { margin-top: 10px; padding: 10px 12px; border: 1px solid #d8cdf0; border-radius: 10px; background: #faf8ff; }
+.ask-answer.hidden { display: none; }
+.ask-answer-text { font-size: 14px; line-height: 1.7; color: #2a2440; white-space: pre-wrap; }

@@ -1927,9 +1927,83 @@ function localFallback(text) {
   };
 }
 
+// 背后悄悄抓当前打开对话，当上下文（读屏；抓不到就返回空）
+async function getConversationContext() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return "";
+    const conv = await chrome.tabs.sendMessage(tab.id, { type: "KOL_GET_CONVERSATION" });
+    if (!conv || !conv.messages || !conv.messages.length) return "";
+    return conv.messages
+      .map((m) => {
+        const who = m.from === "me" ? "我" : m.from === "colleague" ? (m.name || "同事") : (m.name || "对方");
+        return `${who}: ${m.text}`;
+      })
+      .join("\n");
+  } catch (e) {
+    return "";
+  }
+}
+
+// 显示 AI 回答（这是什么意思 / 这怎么办 / 问 AI）
+function showAskAnswer(text) {
+  const box = document.getElementById("ask-answer");
+  const body = document.getElementById("ask-answer-text");
+  body.textContent = text || "";
+  box.classList.remove("hidden");
+  emptyState.classList.add("hidden");
+  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// 「这是什么意思」=看懂；「这怎么办」=出主意。两者都自动带上下文。
+async function askAboutMessage(mode) {
+  const text = messageInput.value.trim();
+  if (!text) { messageInput.focus(); return; }
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const btn = mode === "meaning" ? document.getElementById("ask-meaning") : document.getElementById("ask-howto");
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "AI 思考中…";
+  errorBox.classList.add("hidden");
+  try {
+    const autoCtx = await getConversationContext();
+    const context = [contextInput.value.trim(), autoCtx].filter(Boolean).join("\n");
+    let question, msg;
+    if (mode === "meaning") {
+      // 看懂：text 是看不懂的那条消息
+      question = "请用大白话中文逐句讲清楚这条消息是什么意思，包括可能的言外之意/潜台词。如果结合上下文有更准的理解，请据此说明。";
+      msg = text;
+    } else {
+      // 出主意：text 是运营的问题（这个人死活不同意怎么办）
+      question = text;
+      msg = "";
+    }
+    const res = await fetch(`${API_BASE}/api/ask`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ question, message: msg, context, productId: productSelect.value }),
+      signal: AbortSignal.timeout(50000)
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "AI 回答失败");
+    showAskAnswer(body.answer || "（没有内容）");
+  } catch (e) {
+    errorBox.textContent = e.name === "TimeoutError" ? "AI 超时，请重试。" : e.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
 async function analyze() {
   const message = messageInput.value.trim();
-  if (!message) {
+  const goal = operatorGoalInput.value.trim();
+  if (!message && !goal) {
     messageInput.focus();
     return;
   }
@@ -1944,15 +2018,19 @@ async function analyze() {
       "千问服务未启动，当前显示离线结果。请双击 start-assistant.cmd 后重试。";
     errorBox.classList.remove("hidden");
     analyzeButton.disabled = false;
-    analyzeButton.textContent = "分析并建议回复";
+    analyzeButton.textContent = "💬 生成双语回复";
     return;
   }
+
+  // 自动把当前对话当上下文（实习生不用手动粘）
+  const autoCtx = await getConversationContext();
+  const mergedContext = [contextInput.value.trim(), autoCtx].filter(Boolean).join("\n");
 
   const payload = {
     message,
     productId: productSelect.value,
-    context: contextInput.value.trim(),
-    operatorGoal: operatorGoalInput.value.trim(),
+    context: mergedContext,
+    operatorGoal: goal,
     replyLanguage: replyLanguageSelect?.value || "",
     channel: "Instagram"
   };
@@ -2007,7 +2085,7 @@ async function analyze() {
     }
   } finally {
     analyzeButton.disabled = false;
-    analyzeButton.textContent = "分析并建议回复";
+    analyzeButton.textContent = "💬 生成双语回复";
   }
 }
 
@@ -2095,6 +2173,12 @@ chatInput.addEventListener("keydown", (event) => {
   }
 });
 document.getElementById("analyze").addEventListener("click", analyze);
+document.getElementById("ask-meaning").addEventListener("click", () => askAboutMessage("meaning"));
+document.getElementById("ask-howto").addEventListener("click", () => askAboutMessage("howto"));
+document.getElementById("ask-copy").addEventListener("click", () => {
+  const t = document.getElementById("ask-answer-text").textContent || "";
+  if (t) navigator.clipboard.writeText(t).catch(() => {});
+});
 generateTemplateButton.addEventListener("click", generateQuickTemplate);
 generateFreeButton.addEventListener("click", () => generateFree("chinese_to_target"));
 document

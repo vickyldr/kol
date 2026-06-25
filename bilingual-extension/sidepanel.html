@@ -129,26 +129,37 @@
         </details>
 
         <section class="input-card">
-          <label for="message">红人的消息</label>
-          <textarea id="message" rows="6" placeholder="选中 Instagram 消息后打开插件，或直接粘贴到这里……"></textarea>
+          <label for="message">红人的消息 / 想问的</label>
+          <textarea id="message" rows="5" placeholder="粘贴红人的消息（看不懂就点「这是什么意思」）；或直接问 AI，例如：这个人死活不同意怎么办？"></textarea>
           <label for="operator-goal" class="goal-label">你想怎么回复（可选，留空就让 AI 判断）</label>
           <input id="operator-goal" type="text" placeholder="例如：委婉拒绝 / 砍到 250 / 先稳住等 TL 确认 / 答应但要确认档期" />
           <details class="context-box">
-            <summary>补充上下文（可选）</summary>
-            <label for="context">最近几句对话或已确认条件</label>
-            <textarea id="context" rows="4" placeholder="例如：已谈妥 300 USD、发布 IG 和 TikTok、广告授权 30 天……"></textarea>
+            <summary>对话参考（可选 · 不填 AI 也会自动看当前对话）</summary>
+            <label for="context">把和这个红人的对话复制粘贴进来更准</label>
+            <textarea id="context" rows="4" placeholder="把对话整段复制粘贴到这里……（不填也行，AI 会自动读你当前打开的对话）"></textarea>
           </details>
           <div class="button-row">
-            <button id="load-selection" class="secondary">读取当前选中文字</button>
-            <button id="analyze" class="primary">分析并建议回复</button>
+            <button id="load-selection" class="secondary">读取选中</button>
+            <button id="analyze" class="primary">💬 生成双语回复</button>
+          </div>
+          <div class="button-row ask-row">
+            <button id="ask-meaning" class="secondary">❓ 这是什么意思</button>
+            <button id="ask-howto" class="secondary">🤔 这怎么办</button>
           </div>
           <button id="open-playbook-reactive" class="secondary playbook-entry" type="button">📖 从话术库选回复话术</button>
           <p id="request-error" class="request-error hidden"></p>
+          <section id="ask-answer" class="ask-answer hidden">
+            <div class="card-heading">
+              <span class="card-label">🤖 AI 回答</span>
+              <button id="ask-copy" class="secondary" type="button">复制</button>
+            </div>
+            <div id="ask-answer-text" class="ask-answer-text"></div>
+          </section>
         </section>
 
         <section id="empty-state" class="empty-state">
           <div class="empty-icon">↗</div>
-          <p>先放入一段红人的消息。</p>
+          <p>粘贴红人的话 → 生成回复；看不懂点「这是什么意思」；拿不准点「这怎么办」。</p>
           <small>工具会判断对方意图、匹配话术并给出中英文回复。</small>
         </section>
 
