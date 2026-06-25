@@ -135,21 +135,20 @@
         </details>
 
         <section class="input-card">
-          <label for="message">红人的消息 / 想问的</label>
-          <textarea id="message" rows="5" placeholder="粘贴红人的消息（看不懂就点「这是什么意思」）；或直接问 AI，例如：这个人死活不同意怎么办？"></textarea>
-          <label for="operator-goal" class="goal-label">你想怎么回复（可选，留空就让 AI 判断）</label>
-          <input id="operator-goal" type="text" placeholder="例如：委婉拒绝 / 砍到 250 / 先稳住等 TL 确认 / 答应但要确认档期" />
+          <label for="message">要处理的文字</label>
+          <textarea id="message" rows="5" placeholder="① 想回复：写你要说的中文 → 点「忠实翻译」或「润色生成」&#10;② 看不懂：把外语（红人的 / AI 给你的都行）粘进来 → 点「这是什么意思」&#10;③ 拿不准：直接问，例如「这个人死活不同意怎么办？」→ 点「这怎么办」"></textarea>
+          <input id="operator-goal" type="text" class="hidden" />
           <details class="context-box">
-            <summary>对话参考（可选 · 不填 AI 也会自动看当前对话）</summary>
-            <label for="context">把和这个红人的对话复制粘贴进来更准</label>
-            <textarea id="context" rows="4" placeholder="把对话整段复制粘贴到这里……（不填也行，AI 会自动读你当前打开的对话）"></textarea>
+            <summary>给「这怎么办」补充上下文（可选）</summary>
+            <label for="context">「这怎么办」会自动看当前对话；想更准可把对话粘进来</label>
+            <textarea id="context" rows="4" placeholder="把对话整段复制粘贴到这里……（仅「这怎么办」用；翻译/生成不会自动抓上下文）"></textarea>
           </details>
           <div class="button-row">
-            <button id="load-selection" class="secondary">读取选中</button>
-            <button id="analyze" class="primary">💬 生成双语回复</button>
+            <button id="do-faithful" class="secondary">🔤 忠实翻译</button>
+            <button id="do-polish" class="primary">📝 润色生成</button>
           </div>
           <div class="button-row ask-row">
-            <button id="ask-meaning" class="secondary">❓ 这是什么意思</button>
+            <button id="ask-meaning" class="secondary">❓ 这是什么意思（翻成中文）</button>
             <button id="ask-howto" class="secondary">🤔 这怎么办</button>
           </div>
           <button id="open-playbook-reactive" class="secondary playbook-entry" type="button">📖 从话术库选回复话术</button>
@@ -215,7 +214,7 @@
           </article>
 
           <!-- 3. 分析 & 内部提醒（后台加载 · 默认折叠在下） -->
-          <details id="analysis-block" class="analysis-block">
+          <details id="analysis-block" class="analysis-block hidden">
             <summary id="analysis-summary">识别 & 内部提醒</summary>
 
             <div class="summary-grid">

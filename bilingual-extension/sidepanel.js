@@ -1956,6 +1956,88 @@ function showAskAnswer(text) {
 }
 
 // 「这是什么意思」=看懂；「这怎么办」=出主意。两者都自动带上下文。
+// 忠实翻译 / 润色生成：只把你写的中文翻成外语，绝不自动抓对话、不脑补
+async function doReply(mode) {
+  const text = messageInput.value.trim();
+  if (!text) { messageInput.focus(); return; }
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const btn = document.getElementById(mode === "faithful" ? "do-faithful" : "do-polish");
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = mode === "faithful" ? "翻译中…" : "生成中…";
+  errorBox.classList.add("hidden");
+  const biBox = document.getElementById("bi-split");
+  if (biBox) biBox.innerHTML = '<div class="bi-loading">处理中…</div>';
+  const ab = document.getElementById("analysis-block");
+  if (ab) ab.classList.add("hidden");
+  const aa = document.getElementById("ask-answer");
+  if (aa) aa.classList.add("hidden");
+  emptyState.classList.add("hidden");
+  result.classList.remove("hidden");
+  try {
+    const body = await postRewrite({
+      direction: mode === "faithful" ? "faithful" : "chinese_to_target",
+      message: "",
+      context: contextInput.value.trim(), // 只用手动填的，不自动抓
+      productId: productSelect.value,
+      detectedLanguage: "",
+      replyLanguage: replyLanguageSelect?.value || "",
+      replyChinese: text
+    });
+    replyTargetInput.value = body.reply_target || "";
+    replyChineseInput.value = body.reply_chinese || text;
+    renderBilingualSplit(replyTargetInput.value, replyChineseInput.value);
+  } catch (e) {
+    errorBox.textContent = e.name === "TimeoutError" ? "超时，请重试。" : e.message;
+    errorBox.classList.remove("hidden");
+    if (biBox) biBox.innerHTML = "";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+// 这是什么意思 = 纯翻译（任何外语 → 中文；红人的、你自己的、AI 给你的都行）
+async function askMeaningTranslate() {
+  const text = messageInput.value.trim();
+  if (!text) { messageInput.focus(); return; }
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const btn = document.getElementById("ask-meaning");
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "翻译中…";
+  errorBox.classList.add("hidden");
+  try {
+    const res = await fetch(`${API_BASE}/api/translate`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ text: text.slice(0, 1200) }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "翻译失败");
+    let out = body.translation || "（没有内容）";
+    if (body.term_notes && body.term_notes.length) {
+      out += "\n\n注：" + body.term_notes.map((n) => `「${n.term}」${n.explanation}`).join("；");
+    }
+    showAskAnswer(out);
+  } catch (e) {
+    errorBox.textContent = e.name === "TimeoutError" ? "超时，请重试。" : e.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
 async function askAboutMessage(mode) {
   const text = messageInput.value.trim();
   if (!text) { messageInput.focus(); return; }
@@ -2172,8 +2254,9 @@ chatInput.addEventListener("keydown", (event) => {
     sendChat();
   }
 });
-document.getElementById("analyze").addEventListener("click", analyze);
-document.getElementById("ask-meaning").addEventListener("click", () => askAboutMessage("meaning"));
+document.getElementById("do-faithful").addEventListener("click", () => doReply("faithful"));
+document.getElementById("do-polish").addEventListener("click", () => doReply("polish"));
+document.getElementById("ask-meaning").addEventListener("click", askMeaningTranslate);
 document.getElementById("ask-howto").addEventListener("click", () => askAboutMessage("howto"));
 document.getElementById("ask-copy").addEventListener("click", () => {
   const t = document.getElementById("ask-answer-text").textContent || "";
@@ -2278,11 +2361,6 @@ document.getElementById("import-file").addEventListener("change", async (event) 
   const file = event.target.files?.[0];
   event.target.value = "";
   if (file) await handleImportFile(file);
-});
-document.getElementById("load-selection").addEventListener("click", async () => {
-  const selected = await readSelectionFromPage();
-  if (selected) messageInput.value = selected;
-  messageInput.focus();
 });
 productSelect.addEventListener("change", () => {
   chrome.storage.session.set({ selectedProduct: productSelect.value });
