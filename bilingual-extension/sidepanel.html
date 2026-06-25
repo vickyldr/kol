@@ -108,6 +108,20 @@
 
       <!-- ===================== 板块 A：红人来消息 ===================== -->
       <section id="panel-reactive" class="mode-panel">
+        <details id="coop-card" class="coop-card">
+          <summary>📋 当前合作情况（点开 · 可一键总结/自己改）</summary>
+          <div class="coop-actions">
+            <button id="coop-refresh" type="button" class="primary">🔄 AI 总结当前对话</button>
+            <span id="coop-meta" class="coop-meta"></span>
+          </div>
+          <textarea id="coop-text" rows="7" placeholder="点上面「AI 总结当前对话」自动生成进展小结；也可以自己改、自己加一行。内容会自动保存。"></textarea>
+          <details class="coop-paste">
+            <summary>读不到对话？粘贴进来总结</summary>
+            <textarea id="coop-paste-text" rows="4" placeholder="把对话内容复制粘贴到这里……"></textarea>
+            <button id="coop-paste-go" type="button" class="secondary">总结这段</button>
+          </details>
+        </details>
+
         <section class="input-card">
           <label for="message">红人的消息</label>
           <textarea id="message" rows="6" placeholder="选中 Instagram 消息后打开插件，或直接粘贴到这里……"></textarea>

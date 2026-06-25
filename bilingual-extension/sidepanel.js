@@ -2300,6 +2300,99 @@ loadConfig().then(() => {
 });
 initGuide();
 
+// ====================== 合作情况总结 ======================
+// 读当前打开对话的消息（搭便车读屏）→ AI 总结进展；可自己改、可粘贴、自动保存。
+(function () {
+  const coopCard = document.getElementById("coop-card");
+  const coopText = document.getElementById("coop-text");
+  const coopMeta = document.getElementById("coop-meta");
+  const refreshBtn = document.getElementById("coop-refresh");
+  if (!coopCard || !coopText) return;
+  let currentKey = "";
+
+  async function getOpenConversation() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) return null;
+      return await chrome.tabs.sendMessage(tab.id, { type: "KOL_GET_CONVERSATION" });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function loadForOpen() {
+    const conv = await getOpenConversation();
+    currentKey = (conv && conv.key) || "";
+    const store = await chrome.storage.local.get("kolSummaries");
+    const rec = currentKey ? (store.kolSummaries || {})[currentKey] : null;
+    coopText.value = rec ? rec.text : "";
+    coopMeta.textContent = rec
+      ? `${conv && conv.name ? conv.name + " · " : ""}更新于 ${new Date(rec.updatedAt).toLocaleString()}`
+      : (conv && conv.name ? conv.name : "（先在 IG 打开一个对话）");
+  }
+
+  async function save() {
+    if (!currentKey) return;
+    const store = await chrome.storage.local.get("kolSummaries");
+    const all = store.kolSummaries || {};
+    all[currentKey] = { text: coopText.value, updatedAt: Date.now() };
+    await chrome.storage.local.set({ kolSummaries: all });
+  }
+
+  async function summarize(pasteText) {
+    if (!serviceOnline) {
+      errorBox.textContent = "千问服务尚未连接。";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    const orig = refreshBtn.textContent;
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "AI 总结中…";
+    try {
+      const conv = await getOpenConversation();
+      if (conv && conv.key) currentKey = conv.key;
+      let payload;
+      if (pasteText) {
+        payload = { text: pasteText, creatorName: (conv && conv.name) || "" };
+        if (!currentKey) currentKey = "paste:" + Date.now();
+      } else {
+        if (!conv || !conv.messages || !conv.messages.length) {
+          errorBox.textContent = "没读到当前对话——请在 IG 打开一个对话(可往上滚多看几条)，或用下面「粘贴进来总结」。";
+          errorBox.classList.remove("hidden");
+          return;
+        }
+        payload = { messages: conv.messages, creatorName: conv.name, isGroup: conv.isGroup };
+      }
+      const res = await fetch(`${API_BASE}/api/summary`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(40000)
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "总结失败");
+      coopText.value = body.summary || coopText.value;
+      await save();
+      coopMeta.textContent = `${conv && conv.name ? conv.name + " · " : ""}刚刚更新`;
+    } catch (e) {
+      errorBox.textContent = e.name === "TimeoutError" ? "总结超时，请重试。" : e.message;
+      errorBox.classList.remove("hidden");
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = orig;
+    }
+  }
+
+  coopCard.addEventListener("toggle", () => { if (coopCard.open) loadForOpen(); });
+  refreshBtn.addEventListener("click", () => summarize());
+  document.getElementById("coop-paste-go").addEventListener("click", () => {
+    const t = document.getElementById("coop-paste-text").value.trim();
+    if (t) summarize(t);
+  });
+  let saveTimer;
+  coopText.addEventListener("input", () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); });
+})();
+
 // ====================== KOL 提醒面板 ======================
 (function () {
   const DEFAULT_PREFIXES = ["recco", "rythmix", "aicatch", "vivavideo"];

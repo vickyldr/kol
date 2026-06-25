@@ -136,7 +136,7 @@
   // —— 读「打开的对话」————————————————————————————————
 
   // 找到对话里每条消息气泡（带文字的最内层），按出现顺序返回 {from,name,text}
-  function readOpenConversation() {
+  function readOpenConversation(limit = 14) {
     const main = document.querySelector('div[role="main"], main');
     if (!main) return null;
 
@@ -182,7 +182,7 @@
       conversationTitle() ||
       "";
 
-    return { messages: messages.slice(-14), isGroup, creatorName };
+    return { messages: messages.slice(-limit), isGroup, creatorName };
   }
 
   // 群聊里每条消息上方通常有发送者名字；尽量往上找一个短文本当名字
@@ -627,4 +627,22 @@
   document.addEventListener("scroll", scheduleScan, true);
   window.addEventListener("focus", scheduleScan);
   setInterval(watchUrl, 800); // IG 是单页应用，靠轮询察觉换会话
+
+  // 供侧边栏"合作情况总结"取当前打开对话的消息（读屏，不碰 IG 接口）
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "KOL_GET_CONVERSATION") return;
+    try {
+      const conv = readOpenConversation(80);
+      const name = conversationTitle() || (conv && conv.creatorName) || "";
+      sendResponse({
+        key: titleKey(name),
+        name,
+        isGroup: conv ? conv.isGroup : false,
+        messages: conv ? conv.messages : []
+      });
+    } catch (e) {
+      sendResponse({ key: "", name: "", messages: [] });
+    }
+    return true;
+  });
 })();

@@ -468,6 +468,33 @@ async function parseTodo(payload) {
   };
 }
 
+// 合作情况小结：读一段对话（消息数组或粘贴的纯文本），给运营快速回顾进展。
+async function summarizeConversation(payload) {
+  const messages = Array.isArray(payload.messages) ? payload.messages : [];
+  const rawText = String(payload.text || "").trim();
+  const systemPrompt = `你帮中国 KOL 运营快速回顾一个红人合作进展。读给你的这段对话，输出简明中文小结。
+要点（只写对话里有依据的，绝不编造）：
+- 当前阶段：一句话。
+- 已完成/已发：在这些里挑对话中确有发生的——报价确认、合同发了/签了、收款信息、brief 发了、积分/会员充值、初稿来了、修改稿、审核通过、已发布、帖子链接、已付款。
+- 还在等 / 没做：对方欠我们的，或我们欠对方的。
+- 风险/异常：红人最近态度、拖延、要涨价、要延期、突然说的奇怪的话等。
+- 建议下一步。
+用简短中文条目（可用 - 列表），方便一眼看完。返回 JSON：{"summary":"小结文本"}。`;
+  const result = await callQwen({
+    system: systemPrompt,
+    user: JSON.stringify({
+      creator_name: payload.creatorName || "",
+      is_group: Boolean(payload.isGroup),
+      recent_messages: messages.slice(-80),
+      pasted_text: rawText.slice(0, 6000)
+    }),
+    maxTokens: 900,
+    temperature: 0.2,
+    model: MODEL_FAST
+  });
+  return { summary: String(result.summary || "").trim() };
+}
+
 // 快出回复：只生成「外语回复 + 中文对照」，不做完整分析，追求 3-5 秒先出。
 async function quickReply(payload) {
   const product = findProduct(payload.productId);
@@ -1117,6 +1144,15 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "单条消息过长。" });
       }
       return json(res, 200, await translateFaithfully(text));
+    }
+
+    if (req.method === "POST" && req.url === "/api/summary") {
+      const payload = await readBody(req);
+      const hasMsgs = Array.isArray(payload.messages) && payload.messages.length;
+      if (!hasMsgs && !String(payload.text || "").trim()) {
+        return json(res, 400, { error: "没读到对话内容。" });
+      }
+      return json(res, 200, await summarizeConversation(payload));
     }
 
     if (req.method === "POST" && req.url === "/api/parse-todo") {
