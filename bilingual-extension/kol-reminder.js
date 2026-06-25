@@ -654,19 +654,23 @@
   const lastSummarizedSig = {};
   async function autoUpdateSummaryOnLeave(buf) {
     try {
-      if (!buf || !buf.key || !buf.messages || buf.messages.length < 2) return;
+      if (!buf || !buf.messages || buf.messages.length < 2) return;
+      // 用对话的固定 ID 存（取不到再退回名字），名字识别有出入也不会丢匹配
+      const sk = buf.tid || buf.key;
+      if (!sk) return;
       const sig = buf.messages.length + "|" + msgSig(buf.messages[buf.messages.length - 1]);
-      if (lastSummarizedSig[buf.key] === sig) return; // 没新内容，别重复花钱
-      lastSummarizedSig[buf.key] = sig;
+      if (lastSummarizedSig[sk] === sig) return; // 没新内容，别重复花钱
+      lastSummarizedSig[sk] = sig;
       const store = await chrome.storage.local.get("kolSummaries");
       const all = store.kolSummaries || {};
-      const previousSummary = all[buf.key] ? all[buf.key].text : "";
+      const prevRec = all[sk] || (buf.key ? all[buf.key] : null);
+      const previousSummary = prevRec ? prevRec.text : "";
       const res = await chrome.runtime.sendMessage({
         type: "KOL_SUMMARY",
         payload: { messages: buf.messages, previousSummary, creatorName: buf.name }
       });
       if (res && res.summary) {
-        all[buf.key] = { text: res.summary, name: buf.name, updatedAt: new Date().toISOString() };
+        all[sk] = { text: res.summary, name: buf.name, tid: buf.tid || "", key: buf.key || "", updatedAt: new Date().toISOString() };
         await chrome.storage.local.set({ kolSummaries: all });
       }
     } catch (e) {
@@ -679,8 +683,8 @@
     if (location.pathname !== lastPath) {
       // 离开了一个对话 → 自动更新它的合作进展
       const left = convBuffer;
-      if (left && left.tid && left.key && left.messages.length) {
-        autoUpdateSummaryOnLeave({ key: left.key, name: left.name, messages: left.messages.slice() });
+      if (left && (left.tid || left.key) && left.messages.length) {
+        autoUpdateSummaryOnLeave({ tid: left.tid, key: left.key, name: left.name, messages: left.messages.slice() });
       }
       lastPath = location.pathname;
       removeHint();
@@ -709,6 +713,7 @@
           ? convBuffer.messages
           : (conv ? conv.messages : []);
       sendResponse({
+        tid: tid || "",
         key: titleKey(name),
         name,
         isGroup: conv ? conv.isGroup : false,

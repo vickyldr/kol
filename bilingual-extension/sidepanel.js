@@ -2476,6 +2476,7 @@ initGuide();
   const editBtn = document.getElementById("coop-edit");
   const clearBtn = document.getElementById("coop-clear");
   if (!coopCard || !coopText) return;
+  let currentTid = "";
   let currentKey = "";
   let currentName = "";
 
@@ -2533,10 +2534,12 @@ initGuide();
 
   async function loadForOpen() {
     const conv = await getOpenConversation();
+    currentTid = (conv && conv.tid) || "";
     currentKey = (conv && conv.key) || "";
     currentName = (conv && conv.name) || "";
-    const store = await chrome.storage.local.get("kolSummaries");
-    const rec = currentKey ? (store.kolSummaries || {})[currentKey] : null;
+    const all = (await chrome.storage.local.get("kolSummaries")).kolSummaries || {};
+    // 优先用对话固定 ID 取；取不到再退回按名字（兼容旧数据）
+    const rec = (currentTid && all[currentTid]) || (currentKey && all[currentKey]) || null;
     coopText.value = rec ? rec.text : "";
     renderChecklist();
     coopMeta.textContent = rec
@@ -2545,10 +2548,11 @@ initGuide();
   }
 
   async function save() {
-    if (!currentKey) return;
+    const sk = currentTid || currentKey;
+    if (!sk) return;
     const store = await chrome.storage.local.get("kolSummaries");
     const all = store.kolSummaries || {};
-    all[currentKey] = { text: coopText.value, name: currentName, updatedAt: Date.now() };
+    all[sk] = { text: coopText.value, name: currentName, tid: currentTid, key: currentKey, updatedAt: Date.now() };
     await chrome.storage.local.set({ kolSummaries: all });
   }
 
@@ -2560,7 +2564,7 @@ initGuide();
     grabBtn.textContent = "抓取中…";
     try {
       const conv = await getOpenConversation();
-      if (conv && conv.key) { currentKey = conv.key; currentName = conv.name || ""; }
+      if (conv && (conv.tid || conv.key)) { currentTid = conv.tid || ""; currentKey = conv.key || ""; currentName = conv.name || ""; }
       const view = (conv && conv.currentMessages) || [];
       if (!view.length) {
         errorBox.textContent = "这一屏没读到消息——确认在 IG 打开了对话，或直接把对话粘贴进框里。";
