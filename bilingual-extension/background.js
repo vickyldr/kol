@@ -150,6 +150,28 @@ function ensureAlarm() {
 }
 chrome.runtime.onInstalled.addListener(ensureAlarm);
 chrome.runtime.onStartup.addListener(ensureAlarm);
+
+// 打开 Chrome 时，若有待处理的红人，自动弹出"今日待办"窗口（解决"懒得开提醒面板"）
+async function openTodoWindowIfPending() {
+  try {
+    const items = await computeReminders();
+    if (items.length) openTodoWindow();
+  } catch (e) {
+    console.warn("待办窗口检查失败", e);
+  }
+}
+function openTodoWindow() {
+  chrome.windows.create(
+    { url: chrome.runtime.getURL("reminders.html"), type: "popup", width: 460, height: 720 },
+    ignoreLastError
+  );
+}
+chrome.runtime.onStartup.addListener(openTodoWindowIfPending);
+
+// 侧边栏/通知点"弹出待办窗口"
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "KOL_OPEN_TODO_WINDOW") openTodoWindow();
+});
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === REMINDER_ALARM) refreshReminders();
 });
@@ -267,11 +289,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// 点桌面通知 → 打开侧边栏看清单
+// 点桌面通知 → 弹出"今日待办"窗口
 chrome.notifications.onClicked.addListener(() => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0] && tabs[0].id) openSidePanel(tabs[0].id);
-  });
+  openTodoWindow();
 });
 
 ensureAlarm();

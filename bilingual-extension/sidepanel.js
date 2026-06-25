@@ -2613,6 +2613,8 @@ initGuide();
   function openPanel() { panel.classList.remove("hidden"); loadSettings(); render(); panel.scrollIntoView({ behavior: "smooth", block: "start" }); }
   openBtn && openBtn.addEventListener("click", () => panel.classList.contains("hidden") ? openPanel() : panel.classList.add("hidden"));
   closeBtn && closeBtn.addEventListener("click", () => panel.classList.add("hidden"));
+  const popoutBtn = document.getElementById("reminder-popout");
+  popoutBtn && popoutBtn.addEventListener("click", () => chrome.runtime.sendMessage({ type: "KOL_OPEN_TODO_WINDOW" }));
 
   // 记账本一变就重渲染（实时反映采集结果）
   chrome.storage.onChanged.addListener((changes, area) => {

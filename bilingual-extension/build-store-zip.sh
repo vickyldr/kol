@@ -19,6 +19,8 @@ FILES=(
   sidepanel.html
   sidepanel.css
   sidepanel.js
+  reminders.html
+  reminders.js
   knowledge.js
   icon16.png
   icon48.png
