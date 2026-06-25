@@ -1,6 +1,40 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
+
+// ——— 轻量缓存：省 token + 省响应时间 ———
+function hashKey(obj) {
+  const s = typeof obj === "string" ? obj : JSON.stringify(obj);
+  return crypto.createHash("sha1").update(s).digest("hex");
+}
+class TTLCache {
+  constructor(max, ttlMs) {
+    this.max = max;
+    this.ttl = ttlMs;
+    this.map = new Map();
+    this.hits = 0;
+    this.misses = 0;
+  }
+  get(key) {
+    const e = this.map.get(key);
+    if (!e) { this.misses += 1; return undefined; }
+    if (Date.now() > e.exp) { this.map.delete(key); this.misses += 1; return undefined; }
+    this.map.delete(key);
+    this.map.set(key, e); // 触达即刷新到队尾（LRU）
+    this.hits += 1;
+    return e.value;
+  }
+  set(key, value) {
+    if (this.map.has(key)) this.map.delete(key);
+    this.map.set(key, { value, exp: Date.now() + this.ttl });
+    while (this.map.size > this.max) this.map.delete(this.map.keys().next().value);
+  }
+}
+// 翻译是确定性的（temperature 0），可长缓存；判断稍易变，缓存 1 小时。
+// 两个缓存对【全团队共享】：一个人翻过的常用话术，其他同事直接命中。
+const translateCache = new TTLCache(5000, 24 * 3600 * 1000);
+const judgeCache = new TTLCache(3000, 3600 * 1000);
 
 const HOST = process.env.KOL_ASSISTANT_HOST || "127.0.0.1";
 const PORT = Number(process.env.KOL_ASSISTANT_PORT || 3210);
@@ -71,9 +105,17 @@ async function readBody(req, maxBytes = 48 * 1024 * 1024) {
   return text ? JSON.parse(text) : {};
 }
 
+// 按文件 mtime 缓存解析结果：playbook.json 等大文件不必每次请求都读盘+解析。
+// 写入后 mtime 变化会自动失效重读。
+const _jsonCache = new Map();
 function loadJson(file, fallback) {
   try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
+    const stat = fs.statSync(file);
+    const hit = _jsonCache.get(file);
+    if (hit && hit.mtime === stat.mtimeMs) return hit.value;
+    const value = JSON.parse(fs.readFileSync(file, "utf8"));
+    _jsonCache.set(file, { mtime: stat.mtimeMs, value });
+    return value;
   } catch {
     return fallback;
   }
@@ -401,6 +443,9 @@ ${REPLY_STYLE}`;
 }
 
 async function translateFaithfully(text) {
+  const cacheKey = hashKey("translate:" + text);
+  const cached = translateCache.get(cacheKey);
+  if (cached) return cached;
   const result = await callQwen({
     system: `你是聊天消息翻译器。只做忠实翻译，不分析、不回复、不补充上下文。
 必须准确保留主语、宾语、动作方向、时态、否定、疑问和祈使语气，特别明确“谁让谁做什么”。
@@ -414,7 +459,7 @@ async function translateFaithfully(text) {
     temperature: 0
   });
 
-  return {
+  const out = {
     translation: String(result.translation || "").trim(),
     source_language: result.source_language || "未知",
     uncertain: Boolean(result.uncertain),
@@ -427,6 +472,8 @@ async function translateFaithfully(text) {
           .filter((item) => item.term && item.explanation)
       : []
   };
+  if (out.translation) translateCache.set(cacheKey, out);
+  return out;
 }
 
 // 提醒判断：读一段对话的最近几条消息，判断红人有没有在等我回、
@@ -434,6 +481,13 @@ async function translateFaithfully(text) {
 // 一切只读对话文本（由插件搭便车采集），不碰 IG 账号。
 async function judgeThread(payload) {
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
+  const cacheKey = hashKey({
+    m: messages.slice(-12),
+    p: payload.productId || "",
+    g: Boolean(payload.isGroup)
+  });
+  const cached = judgeCache.get(cacheKey);
+  if (cached) return cached;
   const systemPrompt = `你是中国 KOL 运营团队的 AI 助理，帮运营盯住每个红人对话有没有“该我处理却被漏掉”的情况。
 你只会看到一段对话最近的几条消息。每条消息标了 from：
 - "me"：运营本人发的；
@@ -487,7 +541,7 @@ async function judgeThread(payload) {
   const toBool = (v) => v === true || v === "true";
   let days = Number(result.follow_up_after_days);
   if (!Number.isFinite(days) || days < 0) days = 2;
-  return {
+  const out = {
     is_pleasantry: toBool(result.is_pleasantry),
     needs_my_reply: toBool(result.needs_my_reply),
     stage: String(result.stage || "").trim(),
@@ -502,6 +556,8 @@ async function judgeThread(payload) {
     reminder_label: String(result.reminder_label || "").trim(),
     ai_note: String(result.ai_note || "").trim()
   };
+  judgeCache.set(cacheKey, out);
+  return out;
 }
 
 async function askQwen(payload) {
@@ -867,7 +923,11 @@ const server = http.createServer(async (req, res) => {
         provider: "阿里云百炼",
         model: MODEL,
         ai_configured: Boolean(process.env.DASHSCOPE_API_KEY),
-        timeout_seconds: 55
+        timeout_seconds: 55,
+        cache: {
+          translate: { size: translateCache.map.size, hits: translateCache.hits, misses: translateCache.misses },
+          judge: { size: judgeCache.map.size, hits: judgeCache.hits, misses: judgeCache.misses }
+        }
       });
     }
 
