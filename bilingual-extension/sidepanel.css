@@ -264,3 +264,7 @@ dialog::backdrop { background: rgba(20,24,36,.4); }
 .coop-paste { margin-top: 8px; }
 .coop-paste > summary { cursor: pointer; font-size: 12px; color: #8b90a0; }
 .coop-paste textarea { width: 100%; box-sizing: border-box; margin-top: 6px; border: 1px solid #d8dced; border-radius: 8px; padding: 7px; font-size: 13px; }
+.coop-step { font-size: 12px; font-weight: 700; color: #6b5a9a; margin: 10px 0 4px; }
+#coop-import { width: 100%; box-sizing: border-box; border: 1px solid #d8cdf0; border-radius: 8px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fff; }
+.coop-done-btn { border: 1px solid #cdb8f0; background: #f3edff; color: #5a4a8a; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.coop-done-btn:hover { background: #e9deff; }

@@ -109,17 +109,23 @@
       <!-- ===================== 板块 A：红人来消息 ===================== -->
       <section id="panel-reactive" class="mode-panel">
         <details id="coop-card" class="coop-card">
-          <summary>📋 当前合作情况（点开 · 可一键总结/自己改）</summary>
+          <summary>📋 当前合作情况（先导入对话 → 总结 → 可自己改）</summary>
+
+          <div class="coop-step">① 导入对话（往上滚多看几条会更全）</div>
           <div class="coop-actions">
-            <button id="coop-refresh" type="button" class="primary">🔄 AI 总结当前对话</button>
+            <button id="coop-grab" type="button" class="secondary">📥 抓取当前可见消息</button>
+            <button id="coop-done" type="button" class="coop-done-btn">✅ 此合作已完结·不再提醒</button>
+          </div>
+          <textarea id="coop-import" rows="5" placeholder="点上面「抓取」自动拉进当前对话；也可以自己把对话复制粘贴到这里。"></textarea>
+
+          <div class="coop-step">② 生成小结</div>
+          <div class="coop-actions">
+            <button id="coop-refresh" type="button" class="primary">🔄 总结这段对话</button>
             <span id="coop-meta" class="coop-meta"></span>
           </div>
-          <textarea id="coop-text" rows="7" placeholder="点上面「AI 总结当前对话」自动生成进展小结；也可以自己改、自己加一行。内容会自动保存。"></textarea>
-          <details class="coop-paste">
-            <summary>读不到对话？粘贴进来总结</summary>
-            <textarea id="coop-paste-text" rows="4" placeholder="把对话内容复制粘贴到这里……"></textarea>
-            <button id="coop-paste-go" type="button" class="secondary">总结这段</button>
-          </details>
+
+          <div class="coop-step">③ 进展小结（可自己改、自己加，自动保存）</div>
+          <textarea id="coop-text" rows="7" placeholder="点上面「总结这段对话」自动生成；之后可以自己改、自己加一行。"></textarea>
         </details>
 
         <section class="input-card">

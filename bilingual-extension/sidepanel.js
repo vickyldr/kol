@@ -2305,10 +2305,14 @@ initGuide();
 (function () {
   const coopCard = document.getElementById("coop-card");
   const coopText = document.getElementById("coop-text");
+  const coopImport = document.getElementById("coop-import");
   const coopMeta = document.getElementById("coop-meta");
   const refreshBtn = document.getElementById("coop-refresh");
+  const grabBtn = document.getElementById("coop-grab");
+  const doneBtn = document.getElementById("coop-done");
   if (!coopCard || !coopText) return;
   let currentKey = "";
+  let currentName = "";
 
   async function getOpenConversation() {
     try {
@@ -2320,28 +2324,69 @@ initGuide();
     }
   }
 
+  // 把消息数组转成"谁: 内容"的文本，给人看也给 AI 总结
+  function messagesToText(conv) {
+    if (!conv || !conv.messages) return "";
+    return conv.messages
+      .map((m) => {
+        const who = m.from === "me" ? "我" : m.from === "colleague" ? (m.name || "同事") : (m.name || "对方");
+        return `${who}: ${m.text}`;
+      })
+      .join("\n");
+  }
+
   async function loadForOpen() {
     const conv = await getOpenConversation();
     currentKey = (conv && conv.key) || "";
+    currentName = (conv && conv.name) || "";
     const store = await chrome.storage.local.get("kolSummaries");
     const rec = currentKey ? (store.kolSummaries || {})[currentKey] : null;
     coopText.value = rec ? rec.text : "";
     coopMeta.textContent = rec
-      ? `${conv && conv.name ? conv.name + " · " : ""}更新于 ${new Date(rec.updatedAt).toLocaleString()}`
-      : (conv && conv.name ? conv.name : "（先在 IG 打开一个对话）");
+      ? `更新于 ${new Date(rec.updatedAt).toLocaleString()}`
+      : (currentName ? currentName : "（先在 IG 打开一个对话）");
   }
 
   async function save() {
     if (!currentKey) return;
     const store = await chrome.storage.local.get("kolSummaries");
     const all = store.kolSummaries || {};
-    all[currentKey] = { text: coopText.value, updatedAt: Date.now() };
+    all[currentKey] = { text: coopText.value, name: currentName, updatedAt: Date.now() };
     await chrome.storage.local.set({ kolSummaries: all });
   }
 
-  async function summarize(pasteText) {
+  // ① 抓取：把当前对话所有可见消息拉进导入框
+  async function grab() {
+    const orig = grabBtn.textContent;
+    grabBtn.disabled = true;
+    grabBtn.textContent = "抓取中…";
+    try {
+      const conv = await getOpenConversation();
+      if (conv && conv.key) { currentKey = conv.key; currentName = conv.name || ""; }
+      const text = messagesToText(conv);
+      if (!text) {
+        errorBox.textContent = "没抓到消息——请在 IG 打开一个对话(可往上滚多看几条)，或直接粘贴。";
+        errorBox.classList.remove("hidden");
+      } else {
+        coopImport.value = text;
+        coopMeta.textContent = `${currentName ? currentName + " · " : ""}已抓取 ${conv.messages.length} 条`;
+      }
+    } finally {
+      grabBtn.disabled = false;
+      grabBtn.textContent = orig;
+    }
+  }
+
+  // ② 总结：用导入框里的对话文本
+  async function summarize() {
     if (!serviceOnline) {
       errorBox.textContent = "千问服务尚未连接。";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    const text = coopImport.value.trim();
+    if (!text) {
+      errorBox.textContent = "请先「📥 抓取当前可见消息」或把对话粘贴进①，再总结。";
       errorBox.classList.remove("hidden");
       return;
     }
@@ -2349,31 +2394,17 @@ initGuide();
     refreshBtn.disabled = true;
     refreshBtn.textContent = "AI 总结中…";
     try {
-      const conv = await getOpenConversation();
-      if (conv && conv.key) currentKey = conv.key;
-      let payload;
-      if (pasteText) {
-        payload = { text: pasteText, creatorName: (conv && conv.name) || "" };
-        if (!currentKey) currentKey = "paste:" + Date.now();
-      } else {
-        if (!conv || !conv.messages || !conv.messages.length) {
-          errorBox.textContent = "没读到当前对话——请在 IG 打开一个对话(可往上滚多看几条)，或用下面「粘贴进来总结」。";
-          errorBox.classList.remove("hidden");
-          return;
-        }
-        payload = { messages: conv.messages, creatorName: conv.name, isGroup: conv.isGroup };
-      }
       const res = await fetch(`${API_BASE}/api/summary`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ text, creatorName: currentName }),
         signal: AbortSignal.timeout(40000)
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "总结失败");
       coopText.value = body.summary || coopText.value;
       await save();
-      coopMeta.textContent = `${conv && conv.name ? conv.name + " · " : ""}刚刚更新`;
+      coopMeta.textContent = "刚刚更新";
     } catch (e) {
       errorBox.textContent = e.name === "TimeoutError" ? "总结超时，请重试。" : e.message;
       errorBox.classList.remove("hidden");
@@ -2383,12 +2414,26 @@ initGuide();
     }
   }
 
+  // 与提醒联动：合作完结 → 把这个对话静音，不再提醒
+  async function markDone() {
+    if (!currentKey) { await loadForOpen(); }
+    if (!currentKey) {
+      errorBox.textContent = "先在 IG 打开这个对话再标记。";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    const store = await chrome.storage.local.get("kolThreads");
+    const map = store.kolThreads || {};
+    map[currentKey] = { ...(map[currentKey] || {}), title: currentName || (map[currentKey] && map[currentKey].title), muted: true, needsReplyRaw: false };
+    await chrome.storage.local.set({ kolThreads: map });
+    doneBtn.textContent = "✅ 已标记完结";
+    setTimeout(() => { doneBtn.textContent = "✅ 此合作已完结·不再提醒"; }, 1600);
+  }
+
   coopCard.addEventListener("toggle", () => { if (coopCard.open) loadForOpen(); });
-  refreshBtn.addEventListener("click", () => summarize());
-  document.getElementById("coop-paste-go").addEventListener("click", () => {
-    const t = document.getElementById("coop-paste-text").value.trim();
-    if (t) summarize(t);
-  });
+  grabBtn.addEventListener("click", grab);
+  refreshBtn.addEventListener("click", summarize);
+  doneBtn.addEventListener("click", markDone);
   let saveTimer;
   coopText.addEventListener("input", () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); });
 })();
