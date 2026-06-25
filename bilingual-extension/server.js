@@ -49,14 +49,26 @@ const AUTH_TOKEN = process.env.KOL_ASSISTANT_TOKEN || "";
 // 管理员口令：设置后，只有带正确管理员口令的请求才能编辑/删除已有话术。
 const ADMIN_TOKEN = process.env.KOL_ASSISTANT_ADMIN_TOKEN || "";
 const ROOT = __dirname;
-// 用户数据目录（话术库、产品）：部署时指向独立目录，更新代码不会覆盖它。
-// 未设置时回退到代码自带的 data/，保持本机单人模式不变。
+// 用户数据目录（话术库、产品、知识库覆盖）：部署时指向独立目录（VPS 上的 ~/kol-data），
+// 更新代码不会覆盖它。未设置时回退到代码自带的 data/，保持本机单人模式不变。
 const DATA_DIR = process.env.KOL_DATA_DIR || path.join(ROOT, "data");
-// 随代码更新的内置资料：知识库、快捷模板。
-const KNOWLEDGE_PATH = path.join(ROOT, "data", "knowledge-base.json");
-const QUICK_TEMPLATES_PATH = path.join(ROOT, "data", "quick-templates.json");
-const PLAYBOOK_PATH = path.join(ROOT, "data", "playbook.json");
-// 用户数据：产品资料、话术存档（放持久目录）。
+const SEED_DIR = path.join(ROOT, "data");
+// 边界规则（重要）：
+// - 代码自带 data/ = 出厂种子，跟着代码走（拆仓库/装插件时带的默认话术）。
+// - KOL_DATA_DIR（VPS 上的持久目录）= 运行数据，永不进 git。
+// 下面这个解析：同名文件若在 KOL_DATA_DIR 里存在，就用线上那份（覆盖种子）；
+// 不存在才回退到代码种子。所以你想单独维护/多项目的知识库，放 KOL_DATA_DIR 即可，
+// 不会污染代码仓库，也不会在更新代码时被覆盖。
+function seedOrLive(name) {
+  const live = path.join(DATA_DIR, name);
+  if (DATA_DIR !== SEED_DIR && fs.existsSync(live)) return live;
+  return path.join(SEED_DIR, name);
+}
+// 内置资料（出厂种子，可被 KOL_DATA_DIR 同名文件覆盖）：知识库、快捷模板、话术脚本。
+const KNOWLEDGE_PATH = seedOrLive("knowledge-base.json");
+const QUICK_TEMPLATES_PATH = seedOrLive("quick-templates.json");
+const PLAYBOOK_PATH = seedOrLive("playbook.json");
+// 用户数据：产品资料、话术存档（放持久目录，由团队在用中增改）。
 const PRODUCTS_PATH = path.join(DATA_DIR, "products.json");
 const ARCHIVE_PATH = path.join(DATA_DIR, "scenario-archive.json");
 // 物料库：metadata 存 assets.json，图片文件存 assets/ 子目录。
