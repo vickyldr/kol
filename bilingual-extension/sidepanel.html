@@ -157,7 +157,7 @@
             <button id="do-polish" class="primary">📝 润色生成</button>
           </div>
           <div class="button-row ask-row">
-            <button id="ask-meaning" class="secondary">❓ 这是什么意思（翻成中文）</button>
+            <button id="ask-meaning" class="secondary">❓ 这是什么意思（看懂·含潜台词）</button>
             <button id="ask-howto" class="secondary">🤔 这怎么办</button>
           </div>
           <button id="open-playbook-reactive" class="secondary playbook-entry" type="button">📖 从话术库选回复话术</button>
@@ -184,12 +184,12 @@
               <span class="card-label">双语回复</span>
               <div class="heading-buttons">
                 <button class="save-trigger secondary" type="button">保存为话术</button>
-                <button id="align-reply" class="secondary" type="button">🔍 逐句核对</button>
-                <button data-copy-value="reply-target">复制外语</button>
+                <button data-copy-value="reply-target">复制全部外语</button>
               </div>
             </div>
-            <div class="bi-split-head"><span>外语（可改）</span><span>中文对照</span></div>
+            <div class="bi-split-head"><span>外语（可改）</span><span>中文对照</span><span>单句</span></div>
             <div id="bi-split" class="bi-split"></div>
+            <p class="bi-hint">每句自动对齐 · 鼠标移到一行两边对应高亮 · 点中文标记该行 · 点「复制」只拿这一句</p>
             <div class="reply-toolbar">
               <label class="reply-language-label">回复语言
                 <select id="reply-language" class="reply-language-select">
@@ -210,8 +210,6 @@
                 </select>
               </label>
             </div>
-            <!-- 逐句核对（回译验证 · 每句可单独复制） -->
-            <div id="align-list" class="align-list"></div>
             <!-- 数据载体（隐藏）：供复制/保存/改写复用 -->
             <textarea id="reply-target" class="hidden"></textarea>
             <textarea id="reply-zh" class="hidden"></textarea>

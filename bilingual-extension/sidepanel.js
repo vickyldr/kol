@@ -511,31 +511,81 @@ function splitSentences(s) {
     .filter(Boolean);
 }
 
-// 渲染「外语 | 中文」左右分屏：逐句一行，悬停整行高亮；外语可直接改。
-function renderBilingualSplit(target, chinese) {
+// 渲染「外语 | 中文」左右分屏。一行＝一句，悬停整行两边对应高亮；
+// 外语可直接改；点「复制」只拿这一句外语；点中文把整行标记住，方便挑句。
+function renderBiRows(pairs) {
   const box = document.getElementById("bi-split");
   if (!box) return;
-  // 新回复出来时清掉上一条的逐句核对结果，避免对不上
-  const al = document.getElementById("align-list");
-  if (al) al.replaceChildren();
   box.replaceChildren();
-  const ts = splitSentences(target);
-  const zs = splitSentences(chinese);
-  const n = Math.max(ts.length, zs.length, 1);
-  for (let i = 0; i < n; i += 1) {
+  pairs.forEach((p) => {
     const row = document.createElement("div");
     row.className = "bi-row";
     const left = document.createElement("div");
     left.className = "bi-cell bi-target";
     left.contentEditable = "true";
     left.spellcheck = false;
-    left.textContent = ts[i] || "";
+    left.textContent = p.target || "";
     left.addEventListener("input", syncTargetFromSplit);
     const right = document.createElement("div");
     right.className = "bi-cell bi-zh";
-    right.textContent = zs[i] || "";
-    row.append(left, right);
+    right.textContent = p.chinese || "";
+    // 点中文（或整行）→ 把这一行标记住（持久高亮），一眼知道要复制哪句外语
+    right.addEventListener("click", () => {
+      const on = row.classList.contains("bi-picked");
+      box.querySelectorAll(".bi-row.bi-picked").forEach((r) => r.classList.remove("bi-picked"));
+      if (!on) row.classList.add("bi-picked");
+    });
+    // 单句复制：只想用其中一句外语时，直接复制这一句
+    const copy = document.createElement("button");
+    copy.className = "bi-copy";
+    copy.type = "button";
+    copy.title = "复制这一句外语";
+    copy.textContent = "复制";
+    copy.addEventListener("click", async () => {
+      box.querySelectorAll(".bi-row.bi-picked").forEach((r) => r.classList.remove("bi-picked"));
+      row.classList.add("bi-picked");
+      await navigator.clipboard.writeText(left.textContent.trim());
+      copy.textContent = "已复制";
+      setTimeout(() => { copy.textContent = "复制"; }, 1000);
+    });
+    row.append(left, right, copy);
     box.appendChild(row);
+  });
+}
+
+function renderBilingualSplit(target, chinese) {
+  const box = document.getElementById("bi-split");
+  if (!box) return;
+  // 先用按标点的快速切分即时显示（瞬间出来），随后自动逐句对齐替换成可信版本
+  const ts = splitSentences(target);
+  const zs = splitSentences(chinese);
+  const n = Math.max(ts.length, zs.length, 1);
+  const pairs = [];
+  for (let i = 0; i < n; i += 1) pairs.push({ target: ts[i] || "", chinese: zs[i] || "" });
+  renderBiRows(pairs);
+  autoAlignSplit(target, chinese);
+}
+
+// 自动逐句对齐：让 AI 把外语回复逐句拆开并配准确中文，保证一句对一句（不用按按钮）。
+let alignSeq = 0;
+async function autoAlignSplit(target, chinese) {
+  if (!serviceOnline || !String(target || "").trim()) return;
+  const myReq = ++alignSeq;
+  try {
+    const r = await fetch(`${API_BASE}/api/align`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ replyTarget: target, replyChinese: chinese }),
+      signal: AbortSignal.timeout(45000)
+    });
+    const b = await r.json();
+    if (!r.ok || myReq !== alignSeq) return; // 回复已被新生成替换 → 丢弃过期对齐
+    const box = document.getElementById("bi-split");
+    if (box && box.contains(document.activeElement)) return; // 用户正在改外语，别打断
+    const pairs = (b.pairs || []).filter((p) => p.target);
+    if (pairs.length) renderBiRows(pairs);
+  } catch (e) {
+    /* 对齐失败就保留快速切分版本 */
   }
 }
 
@@ -2097,9 +2147,11 @@ async function askMeaningTranslate() {
 }
 
 async function askAboutMessage(mode) {
-  // 「这怎么办」的疑问写在第二框；为空时退回用红人原文
-  const text = replyIntentInput.value.trim() || messageInput.value.trim();
-  if (!text) { replyIntentInput.focus(); return; }
+  // 「这是什么意思」看的是红人原文（第一框优先）；「这怎么办」的疑问写在第二框
+  const text = mode === "meaning"
+    ? (messageInput.value.trim() || replyIntentInput.value.trim())
+    : (replyIntentInput.value.trim() || messageInput.value.trim());
+  if (!text) { (mode === "meaning" ? messageInput : replyIntentInput).focus(); return; }
   if (!serviceOnline) {
     errorBox.textContent = "千问服务尚未连接。";
     errorBox.classList.remove("hidden");
@@ -2318,7 +2370,7 @@ chatInput.addEventListener("keydown", (event) => {
 });
 document.getElementById("do-faithful").addEventListener("click", () => doReply("faithful"));
 document.getElementById("do-polish").addEventListener("click", () => doReply("polish"));
-document.getElementById("ask-meaning").addEventListener("click", askMeaningTranslate);
+document.getElementById("ask-meaning").addEventListener("click", () => askAboutMessage("meaning"));
 document.getElementById("ask-howto").addEventListener("click", () => askAboutMessage("howto"));
 document.getElementById("ask-copy").addEventListener("click", () => {
   const t = document.getElementById("ask-answer-text").textContent || "";
@@ -2353,7 +2405,6 @@ templateSelect.addEventListener("change", () => {
   if (template) selectQuickTemplate(template);
 });
 document.getElementById("rewrite-go").addEventListener("click", rewriteGo);
-document.getElementById("align-reply").addEventListener("click", alignReplyAction);
 document
   .getElementById("save-scenario")
   .addEventListener("click", () => openSaveDialog(reactiveSaveCtx()));
