@@ -1031,41 +1031,102 @@ function knowledgeSignature(fields) {
   return JSON.stringify(norm);
 }
 
-// 把新导入的话术并进现有库：完全相同→去重；同 stable_id 但内容变了→冲突（交 AI 判）；其余→新增。
+// 文本归一（去空白/标点、转小写）用于相似度。
+function normText(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[\p{P}\p{S}]/gu, "");
+}
+// 一条话术所有字段值拼起来，作为「内容指纹」原料。
+function recBlob(rec) {
+  const f = (rec && rec.fields) || {};
+  return Object.keys(f).sort().map((k) => f[k]).join(" ");
+}
+// 「产品|语种|场景」键：旧文档上改回复时，场景(步骤)一般不变，靠它能跨行号位移认出同一条。
+function sceneKey(rec) {
+  return `${String((rec && rec.product) || "").trim()}|${String((rec && rec.region) || "").trim()}|${normText(rec && rec.scene)}`;
+}
+function bigrams(s) {
+  const set = new Set();
+  if (s.length === 1) set.add(s);
+  for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+  return set;
+}
+function jaccard(a, b) {
+  if (!a.size || !b.size) return 0;
+  const [small, big] = a.size < b.size ? [a, b] : [b, a];
+  let inter = 0;
+  for (const x of small) if (big.has(x)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+const SIM_THRESHOLD = 0.6; // 同产品/语种内，内容相似度 ≥ 这个值就当「可能是改的同一条」交 AI 判
+
+// 把新导入的话术并进现有库：
+//   完全相同→去重；能对上现有的某条（同 stable_id / 同「产品|语种|场景」/ 高度相似）→冲突，交 AI 判是改还是新增；
+//   完全对不上→新增。这样在「旧文档上补充/修改」的工作流里，改动会被认成对旧条的修改而不是平白多一条。
 function mergeKnowledge(existing, incoming) {
   const result = Array.isArray(existing) ? existing.slice() : [];
   const idIndex = new Map();
+  const sceneIndex = new Map();
   const sigSet = new Set();
+  const meta = []; // { index, prodReg, grams }
   result.forEach((rec, i) => {
     if (rec && rec.stable_id) idIndex.set(rec.stable_id, i);
     sigSet.add(knowledgeSignature(rec && rec.fields));
+    const sk = sceneKey(rec);
+    if (rec && rec.scene && !sceneIndex.has(sk)) sceneIndex.set(sk, i);
+    meta.push({
+      index: i,
+      prodReg: `${(rec && rec.product) || ""}|${(rec && rec.region) || ""}`,
+      grams: bigrams(normText(recBlob(rec)))
+    });
   });
 
   let added = 0;
   let duplicates = 0;
   const conflicts = [];
 
+  // 注意：匹配索引（id/场景/相似度）只用「原有库」，不把本次新增的条目纳入——
+  // 同一份 Word 里每一行都是作者有意安排的独立条目，不该在一次导入内部互相合并；
+  // 只有 sigSet（完全相同内容）会随新增更新，用来去掉一份 Word 里偶发的逐字重复行。
+
   for (const inc of incoming) {
     if (!inc || !inc.fields || !Object.keys(inc.fields).length) continue;
     const sig = knowledgeSignature(inc.fields);
-    const hitIdx = inc.stable_id != null ? idIndex.get(inc.stable_id) : undefined;
-    if (hitIdx != null) {
-      const old = result[hitIdx];
-      if (knowledgeSignature(old.fields) === sig) {
-        duplicates++; // 同 id 同内容
-      } else {
-        conflicts.push({ index: hitIdx, old, incoming: inc });
-      }
-      continue;
-    }
     if (sigSet.has(sig)) {
-      duplicates++; // 内容完全相同（id 不同）
+      duplicates++; // 内容完全相同（无论 id 是否一样）→ 没改，跳过
       continue;
     }
-    result.push(inc);
-    idIndex.set(inc.stable_id, result.length - 1);
-    sigSet.add(sig);
-    added++;
+    // 找它对应的现有条目
+    let matchIdx = inc.stable_id != null ? idIndex.get(inc.stable_id) : undefined;
+    if (matchIdx == null) {
+      const sk = sceneKey(inc);
+      if (inc.scene && sceneIndex.has(sk)) matchIdx = sceneIndex.get(sk);
+    }
+    if (matchIdx == null) {
+      const pr = `${inc.product || ""}|${inc.region || ""}`;
+      const g = bigrams(normText(recBlob(inc)));
+      let best = -1;
+      let bestScore = 0;
+      for (const m of meta) {
+        if (m.prodReg !== pr) continue;
+        const s = jaccard(g, m.grams);
+        if (s > bestScore) {
+          bestScore = s;
+          best = m.index;
+        }
+      }
+      if (best >= 0 && bestScore >= SIM_THRESHOLD) matchIdx = best;
+    }
+    if (matchIdx != null) {
+      conflicts.push({ index: matchIdx, old: result[matchIdx], incoming: inc });
+    } else {
+      result.push(inc);
+      sigSet.add(sig); // 仅用于本次内部的逐字去重，不参与 id/场景/相似度匹配
+      added++;
+    }
   }
 
   return { result, added, duplicates, conflicts };
@@ -1073,81 +1134,77 @@ function mergeKnowledge(existing, incoming) {
 
 const CONFLICT_AI_CAP = 60; // 单次最多送 AI 判这么多冲突，其余默认采用新版（避免一次烧太多额度）
 
-// 让 AI 对「同一场景、内容不一致」的冲突逐组判：保留旧 / 采用新 / 合并。没配 Key 时默认采用新版。
+// 让 AI 对「能对上现有某条、但内容不一致」的每组逐一判：
+//   take_new=新版是对旧条的修改，采用新版；keep_old=新版像误删/残缺，保留旧版；
+//   merge=两边各有用，合并；new=其实是另一条不同的新话术（只是恰好相似），两条都留(当新增)。
+// 返回与 conflicts 等长、按下标对齐的数组。没配 AI 时默认 take_new。
 async function reconcileConflicts(conflicts) {
-  const decisions = new Map(); // index -> { decision, fields, reason }
-  if (!conflicts.length) return decisions;
+  const out = conflicts.map(() => null);
+  if (!conflicts.length) return out;
 
-  const aiBatch = conflicts.slice(0, CONFLICT_AI_CAP);
-  const overflow = conflicts.slice(CONFLICT_AI_CAP);
-  for (const c of overflow) {
-    decisions.set(c.index, {
-      decision: "take_new",
-      fields: c.incoming.fields,
-      reason: "冲突过多，超出本次 AI 判别上限，默认采用新版本"
-    });
+  for (let i = CONFLICT_AI_CAP; i < conflicts.length; i++) {
+    out[i] = { decision: "take_new", reason: "冲突过多，超出本次 AI 判别上限，默认采用新版本" };
   }
+  const aiEnd = Math.min(conflicts.length, CONFLICT_AI_CAP);
 
   if (!process.env.DASHSCOPE_API_KEY) {
-    for (const c of aiBatch) {
-      decisions.set(c.index, {
-        decision: "take_new",
-        fields: c.incoming.fields,
-        reason: "未配置 AI，默认采用新版本（新 Word 覆盖旧条目）"
-      });
+    for (let i = 0; i < aiEnd; i++) {
+      out[i] = { decision: "take_new", reason: "未配置 AI，默认采用新版本（新 Word 覆盖旧条目）" };
     }
-    return decisions;
+    return out;
   }
 
   const chunkSize = 6;
-  for (let i = 0; i < aiBatch.length; i += chunkSize) {
-    const chunk = aiBatch.slice(i, i + chunkSize);
-    const items = chunk.map((c, idx) => ({
-      ref: i + idx,
-      scene: c.incoming.scene || c.old.scene || "",
-      product: c.incoming.product || "",
-      region: c.incoming.region || "",
-      old_fields: c.old.fields,
-      new_fields: c.incoming.fields
-    }));
+  for (let start = 0; start < aiEnd; start += chunkSize) {
+    const end = Math.min(aiEnd, start + chunkSize);
+    const items = [];
+    for (let i = start; i < end; i++) {
+      const c = conflicts[i];
+      items.push({
+        ref: i,
+        scene: c.incoming.scene || c.old.scene || "",
+        product: c.incoming.product || "",
+        region: c.incoming.region || "",
+        old_fields: c.old.fields,
+        new_fields: c.incoming.fields
+      });
+    }
     try {
-      const out = await callQwen({
+      const res = await callQwen({
         system:
-          "你是 KOL 团队话术库的维护助手。下面每一组是同一个场景下「现有版本(old)」和「新导入版本(new)」内容不一致的冲突。" +
-          "请逐组判断如何处理，输出 JSON：{\"decisions\":[{\"ref\":数字,\"decision\":\"keep_old|take_new|merge\",\"fields\":{合并后的字段，仅 decision=merge 时给出},\"reason\":\"一句中文理由\"}]}。" +
-          "判断原则：新版本通常更新、更完整，一般采用新版(take_new)；若新版明显残缺、丢字段、像是误删，则保留旧版(keep_old)；若两版各有有用信息（如旧版多了备注、新版改了正文），则 merge 并给出合并后的 fields（保留两边都需要的字段，正文以新版为准）。只输出 JSON。",
-        user: JSON.stringify({ conflicts: items }),
+          "你是 KOL 团队话术库的维护助手。新话术来自「在旧文档基础上补充/修改」的 Word，所以每一组是新导入版本(new)和库里已有、与之对得上的某条(old)。" +
+          "请逐组判断 new 到底是「改了 old」还是「另起的一条新话术」，输出 JSON：" +
+          "{\"decisions\":[{\"ref\":数字,\"decision\":\"take_new|keep_old|merge|new\",\"fields\":{合并后的字段，仅 decision=merge 时给出},\"reason\":\"一句中文理由\"}]}。" +
+          "判断原则：" +
+          "若 new 是对 old 同一条话术的修改/更新（同一场景、同语言、只是措辞或内容变了）→ take_new（用新版替换旧条）；" +
+          "若 new 明显残缺、丢字段、像误删 → keep_old（保留旧条）；" +
+          "若两版各有有用信息（如旧版多了备注、新版改了正文）→ merge，并给出合并后的 fields（保留两边都需要的字段，正文以新版为准）；" +
+          "若 new 其实讲的是另一件事、只是恰好和 old 相似（不是同一条）→ new（两条都保留，把 new 当新增）。只输出 JSON。",
+        user: JSON.stringify({ pairs: items }),
         maxTokens: 2000,
         temperature: 0.1,
         model: MODEL_FAST
       });
-      const list = Array.isArray(out?.decisions) ? out.decisions : [];
+      const list = Array.isArray(res?.decisions) ? res.decisions : [];
       for (const d of list) {
-        const c = chunk[d.ref - i];
-        if (!c) continue;
-        let fields = c.incoming.fields;
-        if (d.decision === "keep_old") fields = c.old.fields;
-        else if (d.decision === "merge" && d.fields && typeof d.fields === "object") {
-          fields = { ...c.old.fields, ...c.incoming.fields, ...d.fields };
-        }
-        decisions.set(c.index, {
-          decision: d.decision || "take_new",
-          fields,
+        const i = d.ref;
+        if (typeof i !== "number" || i < start || i >= end) continue;
+        out[i] = {
+          decision: ["take_new", "keep_old", "merge", "new"].includes(d.decision) ? d.decision : "take_new",
+          fields: d.fields && typeof d.fields === "object" ? d.fields : undefined,
           reason: String(d.reason || "").slice(0, 120)
-        });
+        };
+      }
+      for (let i = start; i < end; i++) {
+        if (!out[i]) out[i] = { decision: "take_new", reason: "AI 未给出该条判断，默认采用新版本" };
       }
     } catch (error) {
-      // AI 这批失败：默认采用新版，不阻断整体导入。
-      for (const c of chunk) {
-        decisions.set(c.index, {
-          decision: "take_new",
-          fields: c.incoming.fields,
-          reason: "AI 判别失败，默认采用新版本：" + (error.message || "")
-        });
+      for (let i = start; i < end; i++) {
+        out[i] = { decision: "take_new", reason: "AI 判别失败，默认采用新版本：" + (error.message || "") };
       }
     }
   }
-  return decisions;
+  return out;
 }
 
 // 把话术文档里的示例截图存进物料库；同一张图（内容相同）用内容哈希做 id，重复导入不会堆积。
@@ -1204,20 +1261,34 @@ async function importKnowledge(payload) {
     }
   }
 
-  // 2) 合并 + AI 判冲突。
+  // 2) 合并 + AI 判：每条冲突是「改了旧的」还是「另起的新话术」。
   const merged = mergeKnowledge(existing, incoming);
   const decisions = await reconcileConflicts(merged.conflicts);
   const conflictReport = [];
-  for (const c of merged.conflicts) {
-    const d = decisions.get(c.index) || { decision: "take_new", fields: c.incoming.fields, reason: "" };
-    if (d.decision !== "keep_old") merged.result[c.index].fields = d.fields;
+  let modified = 0;
+  let keptOld = 0;
+  let addedFromConflicts = 0;
+  merged.conflicts.forEach((c, i) => {
+    const d = decisions[i] || { decision: "take_new", reason: "" };
+    if (d.decision === "new") {
+      merged.result.push(c.incoming); // AI 认定是另一条新话术 → 两条都留
+      addedFromConflicts++;
+    } else if (d.decision === "keep_old") {
+      keptOld++;
+    } else if (d.decision === "merge" && d.fields) {
+      merged.result[c.index].fields = { ...c.old.fields, ...c.incoming.fields, ...d.fields };
+      modified++;
+    } else {
+      merged.result[c.index].fields = c.incoming.fields; // take_new
+      modified++;
+    }
     conflictReport.push({
       scene: c.incoming.scene || c.old.scene || "",
       region: c.incoming.region || "",
       decision: d.decision,
       reason: d.reason
     });
-  }
+  });
 
   // 3) 写回团队库：永远写线上目录（DATA_DIR），不回写种子。
   saveJson(KNOWLEDGE_LIVE_PATH, merged.result);
@@ -1229,7 +1300,9 @@ async function importKnowledge(payload) {
     ok: true,
     before: Array.isArray(existing) ? existing.length : 0,
     after: merged.result.length,
-    added: merged.added,
+    added: merged.added + addedFromConflicts,
+    modified,
+    kept_old: keptOld,
     duplicates: merged.duplicates,
     conflicts: conflictReport.length,
     conflict_detail: conflictReport.slice(0, 50),

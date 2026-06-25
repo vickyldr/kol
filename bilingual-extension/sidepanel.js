@@ -3548,7 +3548,9 @@ initGuide();
               ? "保留旧版"
               : c.decision === "merge"
               ? "合并"
-              : "采用新版"
+              : c.decision === "new"
+              ? "另起新条"
+              : "改旧条(采用新版)"
           }</b>${c.reason ? `<span class="kb-mini2">（${esc(c.reason)}）</span>` : ""}</li>`
       )
       .join("");
@@ -3556,8 +3558,9 @@ initGuide();
       '<div class="kb-preview-box">' +
       '<div class="kb-stat-row">' +
       `<span class="kb-stat">新增 <b>${d.added}</b></span>` +
+      `<span class="kb-stat">改旧条 <b>${d.modified || 0}</b></span>` +
+      `<span class="kb-stat">保留旧版 <b>${d.kept_old || 0}</b></span>` +
       `<span class="kb-stat">重复跳过 <b>${d.duplicates}</b></span>` +
-      `<span class="kb-stat">冲突 <b>${d.conflicts}</b></span>` +
       `<span class="kb-stat">图片 <b>${d.images_saved}</b></span>` +
       "</div>" +
       `<p class="kb-mini">团队库：${d.before} → <b>${d.after}</b> 条${
