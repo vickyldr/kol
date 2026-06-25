@@ -472,14 +472,26 @@ async function parseTodo(payload) {
 async function summarizeConversation(payload) {
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   const rawText = String(payload.text || "").trim();
-  const systemPrompt = `你帮中国 KOL 运营快速回顾一个红人合作进展。读给你的这段对话，输出简明中文小结。
-要点（只写对话里有依据的，绝不编造）：
-- 当前阶段：一句话。
-- 已完成/已发：在这些里挑对话中确有发生的——报价确认、合同发了/签了、收款信息、brief 发了、积分/会员充值、初稿来了、修改稿、审核通过、已发布、帖子链接、已付款。
-- 还在等 / 没做：对方欠我们的，或我们欠对方的。
-- 风险/异常：红人最近态度、拖延、要涨价、要延期、突然说的奇怪的话等。
-- 建议下一步。
-用简短中文条目（可用 - 列表），方便一眼看完。返回 JSON：{"summary":"小结文本"}。`;
+  const prev = String(payload.previousSummary || "").trim();
+  const systemPrompt = `你帮中国 KOL 运营整理一个红人合作的进展，输出一份"按合作流程顺序排列的清单"，每一步都标明做了没做。
+固定按这个顺序逐条输出，每条开头用 ✅(已完成) / ⬜(未做或在等) / ➖(不涉及)：
+1. 建联 / 触达
+2. 报价确认
+3. 要到账号（IG handle / 账号 ID）
+4. 合同 / 收款信息
+5. 合同已发 / 已签
+6. brief 已发
+7. 积分 / 会员充值
+8. 初稿
+9. 修改稿
+10. 审核通过
+11. 发布 + 帖子链接
+12. 付款
+规则：
+- 每条后面跟一句话依据或细节（例：✅ 报价确认 — 300USD 已谈妥）；没依据的标 ⬜ 并写"未见"。
+- 只写对话里有依据的，绝不编造。
+- 清单后另起一段 "⚠️ 备注：" 写流程之外的风险/异常/红人态度/下一步建议（没有就写"无"）。
+${prev ? "下面是这条对话之前的进展清单。请在它基础上，用新的对话内容更新各步状态、补充细节，【不要丢掉之前已确认的事实】，只做增量更新：\n----\n" + prev + "\n----\n" : ""}只返回 JSON：{"summary":"清单文本"}。`;
   const result = await callQwen({
     system: systemPrompt,
     user: JSON.stringify({
@@ -488,7 +500,7 @@ async function summarizeConversation(payload) {
       recent_messages: messages.slice(-80),
       pasted_text: rawText.slice(0, 6000)
     }),
-    maxTokens: 900,
+    maxTokens: 1000,
     temperature: 0.2,
     model: MODEL_FAST
   });

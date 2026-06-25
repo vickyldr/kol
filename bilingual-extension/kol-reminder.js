@@ -587,7 +587,7 @@
       const inboxKeys = new Set(inbox.map((r) => r.id));
       if (openTid) {
         // 滚动累积：换了对话就清空缓冲；把当前屏幕渲染出的消息累加进缓冲
-        if (convBuffer.tid !== openTid) convBuffer = { tid: openTid, messages: [] };
+        if (convBuffer.tid !== openTid) convBuffer = { tid: openTid, key: "", name: "", messages: [] };
         const fullView = readOpenConversation(500);
         if (fullView && fullView.messages.length) mergeIntoBuffer(fullView.messages);
 
@@ -610,6 +610,9 @@
           // 用列表里那条更完整的名字来显示
           const inboxRow = inbox.find((r) => r.id === key);
           const displayName = (inboxRow && inboxRow.title) || name;
+          // 记到累积缓冲，供"离开时自动更新合作进展"
+          convBuffer.key = key;
+          convBuffer.name = displayName;
 
           await upsertThread(
             key, // 用归一化名字当 key
@@ -647,9 +650,38 @@
     scanTimer = setTimeout(scan, 600);
   }
 
+  // 离开对话时，把这次聊的内容自动并进"合作进展"（增量更新，不丢旧的）
+  const lastSummarizedSig = {};
+  async function autoUpdateSummaryOnLeave(buf) {
+    try {
+      if (!buf || !buf.key || !buf.messages || buf.messages.length < 2) return;
+      const sig = buf.messages.length + "|" + msgSig(buf.messages[buf.messages.length - 1]);
+      if (lastSummarizedSig[buf.key] === sig) return; // 没新内容，别重复花钱
+      lastSummarizedSig[buf.key] = sig;
+      const store = await chrome.storage.local.get("kolSummaries");
+      const all = store.kolSummaries || {};
+      const previousSummary = all[buf.key] ? all[buf.key].text : "";
+      const res = await chrome.runtime.sendMessage({
+        type: "KOL_SUMMARY",
+        payload: { messages: buf.messages, previousSummary, creatorName: buf.name }
+      });
+      if (res && res.summary) {
+        all[buf.key] = { text: res.summary, name: buf.name, updatedAt: new Date().toISOString() };
+        await chrome.storage.local.set({ kolSummaries: all });
+      }
+    } catch (e) {
+      /* 后台更新失败就算了，不打扰用户 */
+    }
+  }
+
   let lastPath = location.pathname;
   function watchUrl() {
     if (location.pathname !== lastPath) {
+      // 离开了一个对话 → 自动更新它的合作进展
+      const left = convBuffer;
+      if (left && left.tid && left.key && left.messages.length) {
+        autoUpdateSummaryOnLeave({ key: left.key, name: left.name, messages: left.messages.slice() });
+      }
       lastPath = location.pathname;
       removeHint();
       scheduleScan();

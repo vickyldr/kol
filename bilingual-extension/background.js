@@ -144,6 +144,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+// 代发 /api/summary：内容脚本在你离开对话时自动更新合作进展
+async function handleSummary(payload) {
+  const { kolConfig } = await chrome.storage.local.get("kolConfig");
+  const base = kolConfig?.apiBase || "http://106.54.206.174:3210";
+  const token = kolConfig?.token || "";
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["X-KOL-Token"] = token;
+  const response = await fetch(`${base}/api/summary`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(45000)
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "总结失败");
+  return body;
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "KOL_SUMMARY") return;
+  handleSummary(message.payload)
+    .then(sendResponse)
+    .catch((error) => sendResponse({ error: error.message || "总结失败" }));
+  return true;
+});
+
 const REMINDER_ALARM = "kol-reminder-tick";
 function ensureAlarm() {
   chrome.alarms.create(REMINDER_ALARM, { periodInMinutes: 60 }); // 每小时查一次

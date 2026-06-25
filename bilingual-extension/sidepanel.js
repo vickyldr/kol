@@ -2452,8 +2452,11 @@ initGuide();
         errorBox.textContent = "没抓到消息——请在 IG 打开一个对话(可往上滚多看几条)，或直接粘贴。";
         errorBox.classList.remove("hidden");
       } else {
-        coopImport.value = text;
-        coopMeta.textContent = `${currentName ? currentName + " · " : ""}已抓取 ${conv.messages.length} 条`;
+        // 追加而不是覆盖：你手动粘的几段 + 抓取的，都留着
+        coopImport.value = coopImport.value.trim()
+          ? coopImport.value.trim() + "\n" + text
+          : text;
+        coopMeta.textContent = `${currentName ? currentName + " · " : ""}已并入 ${conv.messages.length} 条`;
       }
     } finally {
       grabBtn.disabled = false;
@@ -2481,7 +2484,8 @@ initGuide();
       const res = await fetch(`${API_BASE}/api/summary`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ text, creatorName: currentName }),
+        // 带上已有进展 → 增量更新，不丢之前确认的
+        body: JSON.stringify({ text, creatorName: currentName, previousSummary: coopText.value.trim() }),
         signal: AbortSignal.timeout(40000)
       });
       const body = await res.json();
