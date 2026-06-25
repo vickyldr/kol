@@ -6,3 +6,7 @@ __pycache__/
 venv/
 processed_approvals.json
 .env
+
+# Chrome 商店打包产物
+bilingual-extension/kol-assistant-v*.zip
+bilingual-extension/.store-stage/
