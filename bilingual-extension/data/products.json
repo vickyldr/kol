@@ -50,5 +50,68 @@
       "不得承诺未确认的付款日期",
       "不得把内部预算上限发给红人"
     ]
+  },
+  {
+    "id": "rythmix",
+    "name": "Rythmix",
+    "status": "active",
+    "description": "AI 音乐 App（与 AI Catch 同一团队）。详细卖点和账号待运营补充。",
+    "social_accounts": {},
+    "download_links": {},
+    "audience": "",
+    "selling_points": [],
+    "subscription_rule": "",
+    "default_platforms": [],
+    "usage_policy": "广告授权期限、二次使用平台和剪辑权限必须逐次确认，不得默认永久授权。",
+    "payment_policy": "完成约定交付后提交付款申请，具体到账日期由运营确认。",
+    "brief_links": [],
+    "forbidden_claims": [
+      "不得自行编造产品卖点、账号或链接",
+      "不得承诺未确认的广告授权期限",
+      "不得承诺未确认的付款日期",
+      "不得把内部预算上限发给红人"
+    ]
+  },
+  {
+    "id": "aicatch",
+    "name": "AI Catch",
+    "status": "active",
+    "description": "AI 应用。详细卖点和账号待运营补充。",
+    "social_accounts": {},
+    "download_links": {},
+    "audience": "",
+    "selling_points": [],
+    "subscription_rule": "",
+    "default_platforms": [],
+    "usage_policy": "广告授权期限、二次使用平台和剪辑权限必须逐次确认，不得默认永久授权。",
+    "payment_policy": "完成约定交付后提交付款申请，具体到账日期由运营确认。",
+    "brief_links": [],
+    "forbidden_claims": [
+      "不得自行编造产品卖点、账号或链接",
+      "不得承诺未确认的广告授权期限",
+      "不得承诺未确认的付款日期",
+      "不得把内部预算上限发给红人"
+    ]
+  },
+  {
+    "id": "vivavideo",
+    "name": "VivaVideo",
+    "status": "active",
+    "description": "视频剪辑 App。详细卖点和账号待运营补充。",
+    "social_accounts": {},
+    "download_links": {},
+    "audience": "",
+    "selling_points": [],
+    "subscription_rule": "",
+    "default_platforms": [],
+    "usage_policy": "广告授权期限、二次使用平台和剪辑权限必须逐次确认，不得默认永久授权。",
+    "payment_policy": "完成约定交付后提交付款申请，具体到账日期由运营确认。",
+    "brief_links": [],
+    "forbidden_claims": [
+      "不得自行编造产品卖点、账号或链接",
+      "不得承诺未确认的广告授权期限",
+      "不得承诺未确认的付款日期",
+      "不得把内部预算上限发给红人"
+    ]
   }
 ]
