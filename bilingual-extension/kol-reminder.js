@@ -25,6 +25,14 @@
     }
   });
 
+  // 一次性清理：旧版按"数字对话ID"存的记账本，换成按名字存后，把旧数据清掉，
+  // 避免残留那些 @一串数字 的脏提醒。清一次即可。
+  chrome.storage.local.get("kolThreadsSchema").then((s) => {
+    if (s.kolThreadsSchema !== 2) {
+      chrome.storage.local.set({ kolThreads: {}, kolThreadsSchema: 2 });
+    }
+  });
+
   // —— 工具 —————————————————————————————————————————————
 
   function log(...args) {
@@ -54,6 +62,18 @@
     const h = String(handle || "").toLowerCase().replace(/^@/, "").trim();
     const mine = String(settings.myHandle || "").toLowerCase().replace(/^@/, "").trim();
     return Boolean(mine) && h === mine;
+  }
+
+  // 记账本的 key：用名字的"归一化前缀"，让列表里的截断名("Rythmix + yai…")
+  // 和对话顶部的完整名("Rythmix + yaitoeii 3100thb…")归到同一条。
+  function titleKey(s) {
+    return String(s || "")
+      .replace(/[…\.]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 24)
+      .trim()
+      .toLowerCase();
   }
 
   // 蓝气泡 / 靠右 = 我自己发的（沿用翻译脚本的判断思路）
@@ -180,11 +200,26 @@
   }
 
   function conversationTitle() {
-    // 对话顶部标题栏的名字
+    // 对话顶部标题栏的名字：右侧对话区最顶部那条短文字
+    const cands = document.querySelectorAll("span, h1, h2, div");
+    for (const el of cands) {
+      const r = el.getBoundingClientRect();
+      if (r.top < 0 || r.top > 110) continue; // 只看顶部条
+      if (r.left < 360) continue; // 在右侧对话区，不是左边列表
+      if (el.childElementCount > 3) continue;
+      const t = (el.innerText || "").trim().split("\n")[0].trim();
+      if (
+        t && t.length > 1 && t.length < 80 &&
+        !/在线|online|active|新消息|new message/i.test(t)
+      ) {
+        return t;
+      }
+    }
+    // 退路：旧版 header
     const header = document.querySelector('div[role="main"] header, main header');
     if (header) {
       const t = (header.innerText || "").split("\n")[0].trim();
-      if (t && t.length < 60) return t;
+      if (t && t.length < 80) return t;
     }
     return "";
   }
@@ -199,35 +234,45 @@
     return best;
   }
 
-  // —— 读「收件箱列表」(best-effort) ——————————————————
-
+  // —— 读「收件箱列表」———————————————————————————————
+  // IG 这版列表行不是链接、没 role，拿不到对话 ID。改为：
+  // 靠每行的头像找到"行"，用"对话名字"当 key（不再依赖数字 ID）。
   function scanInbox() {
     const rows = [];
-    const anchors = document.querySelectorAll('a[href*="/direct/t/"]');
-    anchors.forEach((a) => {
-      const href = a.getAttribute("href") || "";
-      const m = href.match(/\/direct\/t\/([^/?]+)/);
-      if (!m) return;
-      const id = m[1];
-      const container = a.closest('[role="listitem"]') || a;
-      const text = (container.innerText || "").trim();
+    const seen = new Set();
+    const imgs = document.querySelectorAll("img");
+    imgs.forEach((img) => {
+      const r = img.getBoundingClientRect();
+      if (r.left > 460 || r.top < 60) return; // 只看左侧列表区
+      if (r.width < 18 || r.width > 84) return; // 头像大小
+      // 从头像往上找"行"：含时间/新消息/在线标记、且文字不太长的最近祖先
+      let row = img.parentElement;
+      for (let hops = 0; row && hops < 9; hops += 1) {
+        const t = row.innerText || "";
+        if (
+          t && t.length < 240 &&
+          /(分钟|小时|天前|周前|昨天|今天|刚刚|秒前|new message|新消息|在线|online|active)/i.test(t)
+        ) break;
+        row = row.parentElement;
+      }
+      if (!row) return;
+      const text = (row.innerText || "").trim();
       if (!text) return;
       const lines = text.split("\n").map((s) => s.trim()).filter(Boolean);
-      const aria = (container.getAttribute("aria-label") || "").trim();
-      // 名字：取首行；首行像时间/数字则退而用 aria-label
-      let title = lines[0] || aria || "";
-      if (/^\d[\d\s:·]*$/.test(title) || /^\d+(小时|分钟|天|周)/.test(title)) {
-        title = aria || "";
-      }
+      const title = (lines[0] || "").slice(0, 80);
+      if (!title || title.length < 2) return;
+      // 跳过明显不是对话行的（比如"你的便签/分享一件趣事"）
+      if (/便签|分享一件|note$/i.test(title)) return;
+      const key = titleKey(title);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
       const preview = lines.slice(1).join(" ").slice(0, 120);
-      // 未读启发式：aria 标记 / 行内有蓝色未读小圆点 / 整行字重偏粗
       const unread =
-        /未读|Unread|new message/i.test(container.getAttribute("aria-label") || "") ||
-        hasUnreadDot(container) ||
-        isBold(container);
-      // 预览里最后一条是不是"我发的"：IG 会给我方消息加"你:/You:"前缀
+        /(\d+\s*new message|new messages|条新消息|未读)/i.test(text) ||
+        hasUnreadDot(row);
       const lastFromMe = /^\s*(you|您|你|me)\s*[:：]/i.test(preview);
-      rows.push({ id, title, preview, unread, lastFromMe });
+      // 用名字归一化前缀当 key（id 字段沿用，后续代码不必大改）
+      rows.push({ id: key, title, preview, unread, lastFromMe });
     });
     return rows;
   }
@@ -329,7 +374,7 @@
   }
 
   async function maybeRenderDeadlineHint(id, judge) {
-    if (id !== currentThreadId()) return; // 只在当前打开的会话里提示
+    if (id !== titleKey(conversationTitle())) return; // 只在当前打开的会话里提示（按 key 匹配）
     removeHint();
     if (!judge || !judge.should_ask_deadline) return;
 
@@ -409,21 +454,25 @@
       //    关键：只在列表里看到「未读」或「最后一条不是我发的」，就算待回复，
       //    不用你点进对话——这样"红人发了、我只瞄了一眼没点开"也能提醒。
       const inbox = scanInbox();
-      const openId = currentThreadId();
+      const openName = conversationTitle(); // 当前打开对话的完整名字
+      const openKey = titleKey(openName); // 它的归一化 key
+      const openTid = currentThreadId(); // 数字ID，仅用于"打开对话"深链
       if (inbox.length) {
         const map = await getThreads();
         let changed = false;
         inbox.forEach((row) => {
           // 当前正打开的那条交给第 2 步精读，这里不用列表的粗判覆盖它
-          if (row.id === openId) return;
+          if (openKey && row.id === openKey) return;
           const prev = map[row.id] || {};
           // 列表判待回复：未读，或预览显示最后一条不是我发的
           const inboxNeedsReply =
             Boolean(row.unread) || (Boolean(row.preview) && !row.lastFromMe);
+          // 显示名保留更长更完整的那个
+          const title =
+            (row.title || "").length > (prev.title || "").length ? row.title : (prev.title || row.title || "");
           const next = {
             ...prev,
-            threadId: row.id,
-            title: row.title || prev.title || "",
+            title,
             inboxPreview: row.preview || prev.inboxPreview || "",
             lastMsgPreview: row.preview || prev.lastMsgPreview || "",
             unread: row.unread,
@@ -440,10 +489,11 @@
       }
 
       // 2) 当前打开的对话：精读消息，判断待回复 + 触发 AI 判断
-      const id = currentThreadId();
-      if (id) {
+      if (openTid) {
         const conv = readOpenConversation();
-        if (conv && conv.messages.length) {
+        const name = openName || (conv && conv.creatorName) || "";
+        const key = titleKey(name);
+        if (conv && conv.messages.length && key) {
           const msgs = conv.messages;
           // 待回复(原始启发式)：最后一条 creator 之后，没有我(me)的回复
           let lastCreatorIdx = -1;
@@ -456,16 +506,13 @@
           const needsReplyRaw = lastCreatorIdx >= 0 && !myReplyAfter;
           const last = msgs[msgs.length - 1];
 
-          // 名字优先用左边列表里这条的名字（最可靠），其次对话标题/红人名
-          const inboxRow = inbox.find((r) => r.id === id) || {};
-          const name = inboxRow.title || conversationTitle() || conv.creatorName || "";
-
           await upsertThread(
-            id,
+            key, // 用归一化名字当 key
             {
+              threadId: openTid, // 数字ID，供"打开对话"深链
               isGroup: conv.isGroup,
               creatorName: conv.creatorName || name,
-              title: name,
+              title: name, // 完整名字用于显示
               lastMsgFrom: last.from,
               lastMsgPreview: last.text.slice(0, 120),
               needsReplyRaw,
@@ -476,7 +523,7 @@
 
           // 若已有判断结果，刷新会话内 DDL 提示
           const map2 = await getThreads();
-          if (map2[id] && map2[id].judge) maybeRenderDeadlineHint(id, map2[id].judge);
+          if (map2[key] && map2[key].judge) maybeRenderDeadlineHint(key, map2[key].judge);
         }
       } else {
         removeHint();

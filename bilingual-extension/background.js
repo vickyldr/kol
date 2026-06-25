@@ -142,21 +142,21 @@ async function computeReminders() {
   const now = Date.now();
   const items = [];
 
-  Object.values(threads).forEach((rec) => {
+  Object.entries(threads).forEach(([recKey, rec]) => {
     if (!rec || rec.muted) return; // 静音的群不提醒
     const j = rec.judge || {};
-    const title = rec.title || rec.creatorName || rec.threadId;
+    const title = rec.title || rec.creatorName || recKey;
     const sig = rec.judgeSignature || "";
 
     // 待回复：红人发了我没回，且不是寒暄收尾，且没被「忽略」
     if (rec.needsReplyRaw && j.is_pleasantry !== true && rec.replyDismissedSig !== sig) {
       const since = rec.firstUnrepliedAt || rec.lastSeenAt;
       items.push({
-        key: "reply:" + rec.threadId + ":" + sig,
+        key: "reply:" + recKey + ":" + sig,
         kind: "reply",
         threadId: rec.threadId,
         title,
-        label: j.reminder_label || `@${title} 等你回复`,
+        label: j.reminder_label || `${title} 等你回复`,
         waitingDays: Math.max(0, Math.floor(daysSince(since, now)))
       });
     }
@@ -170,11 +170,11 @@ async function computeReminders() {
         : 2;
       if (elapsed >= threshold) {
         items.push({
-          key: "follow:" + rec.threadId + ":" + sig,
+          key: "follow:" + recKey + ":" + sig,
           kind: "follow",
           threadId: rec.threadId,
           title,
-          label: j.reminder_label || `@${title}：${j.waiting_for || "该跟进了"}`,
+          label: j.reminder_label || `${title}：${j.waiting_for || "该跟进了"}`,
           waitingDays: Math.max(0, Math.floor(elapsed))
         });
       }

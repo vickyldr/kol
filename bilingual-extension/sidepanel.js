@@ -2198,19 +2198,19 @@ initGuide();
   // —— 计算提醒清单（与后台一致） ——
   function computeItems(threads, todos) {
     const items = [];
-    Object.values(threads || {}).forEach((rec) => {
+    Object.entries(threads || {}).forEach(([recKey, rec]) => {
       if (!rec || rec.muted) return;
       const j = rec.judge || {};
       // 名字优先；抓不到名字时用消息预览，绝不甩一串对话 ID 给用户
       const looksLikeId = (x) => /^\d{6,}$/.test(String(x || ""));
-      let title = rec.title || rec.creatorName || "";
+      let title = rec.title || rec.creatorName || recKey || "";
       if (looksLikeId(title)) title = "";
       if (!title) title = (rec.inboxPreview || rec.lastMsgPreview || "").slice(0, 24);
       if (!title) title = "未命名对话";
       const sig = rec.judgeSignature || "";
       if (rec.needsReplyRaw && j.is_pleasantry !== true && rec.replyDismissedSig !== sig) {
         items.push({
-          kind: "reply", threadId: rec.threadId, isGroup: rec.isGroup, title,
+          kind: "reply", key: recKey, threadId: rec.threadId, isGroup: rec.isGroup, title,
           label: j.reminder_label || `等你回复`,
           ai: j.ai_note || "",
           meta: `已搁置约 ${daysSince(rec.firstUnrepliedAt || rec.lastSeenAt)} 天 · 上次看到 ${fmt(rec.lastSeenAt)}`
@@ -2221,7 +2221,7 @@ initGuide();
         const elapsed = daysSince(rec.judgedAt || rec.lastSeenAt);
         if (elapsed >= threshold) {
           items.push({
-            kind: "follow", threadId: rec.threadId, isGroup: rec.isGroup, title,
+            kind: "follow", key: recKey, threadId: rec.threadId, isGroup: rec.isGroup, title,
             label: j.reminder_label || `该跟进：${j.waiting_for || ""}`,
             ai: j.ai_note || "",
             meta: `在等：${j.waiting_for || "—"} · 已 ${elapsed} 天`
@@ -2276,21 +2276,21 @@ initGuide();
 
     // 静音群列表
     mutedEl.replaceChildren();
-    const muted = Object.values(threads).filter((r) => r && r.muted);
+    const muted = Object.entries(threads).filter(([, r]) => r && r.muted);
     if (!muted.length) {
       const p = document.createElement("div");
       p.className = "muted-row";
       p.textContent = "（没有静音的群）";
       mutedEl.appendChild(p);
     } else {
-      muted.forEach((r) => {
+      muted.forEach(([recKey, r]) => {
         const row = document.createElement("div");
         row.className = "muted-row";
         const span = document.createElement("span");
-        span.textContent = r.title || r.creatorName || r.threadId;
+        span.textContent = r.title || r.creatorName || recKey;
         const btn = document.createElement("button");
         btn.textContent = "取消静音";
-        btn.addEventListener("click", async () => { await patchThread(r.threadId, { muted: false }); });
+        btn.addEventListener("click", async () => { await patchThread(recKey, { muted: false }); });
         row.append(span, btn);
         mutedEl.appendChild(row);
       });
@@ -2323,19 +2323,21 @@ initGuide();
 
     const actions = document.createElement("div");
     actions.className = "rc-actions";
-    if (it.threadId) {
-      actions.appendChild(btn("打开对话", () => chrome.tabs.create({ url: threadUrl(it.threadId) })));
+    if (it.kind !== "todo") {
+      // 有数字ID就深链到对话；没有(只在列表见过、没点开过)就打开私信收件箱
+      const url = it.threadId ? threadUrl(it.threadId) : "https://www.instagram.com/direct/inbox/";
+      actions.appendChild(btn("打开对话", () => chrome.tabs.create({ url })));
     }
     if (it.kind === "reply") {
-      actions.appendChild(btn("不用提醒了", () => dismissThread(it.threadId, "reply")));
+      actions.appendChild(btn("不用提醒了", () => dismissThread(it.key, "reply")));
     } else if (it.kind === "follow") {
-      actions.appendChild(btn("不用提醒了", () => dismissThread(it.threadId, "follow")));
+      actions.appendChild(btn("不用提醒了", () => dismissThread(it.key, "follow")));
     } else if (it.kind === "todo") {
       actions.appendChild(btn("完成", () => patchTodo(it.todoId, { done: true })));
       actions.appendChild(btn("删除", () => patchTodo(it.todoId, { dismissed: true })));
     }
-    if (it.isGroup && it.threadId) {
-      actions.appendChild(btn("🔕 这个群别再提醒", () => patchThread(it.threadId, { muted: true })));
+    if (it.isGroup && it.key) {
+      actions.appendChild(btn("🔕 这个群别再提醒", () => patchThread(it.key, { muted: true })));
     }
     el.appendChild(actions);
     return el;
