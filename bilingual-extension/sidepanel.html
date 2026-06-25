@@ -32,6 +32,15 @@
         <input id="server-admin" type="password" placeholder="留空＝普通成员，只能新增和查看" />
         <button id="save-server" type="button" class="primary">保存并连接</button>
         <p id="server-settings-status" class="template-status hidden"></p>
+        <hr style="border:none;border-top:1px solid #eee;margin:12px 0" />
+        <label>本地记录备份（合作进度 / 提醒 / 待办 / 身份）</label>
+        <div class="button-row">
+          <button id="backup-export" type="button" class="secondary">💾 导出备份</button>
+          <button id="backup-import" type="button" class="secondary">📂 导入恢复</button>
+          <input id="backup-file" type="file" accept="application/json,.json" class="hidden" />
+        </div>
+        <p id="backup-status" class="template-status hidden"></p>
+        <small style="color:#888;display:block;margin-top:4px">换电脑、或万一记录丢了，用这两个按钮搬家 / 还原。</small>
       </details>
 
       <div class="product-bar">

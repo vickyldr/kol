@@ -2375,6 +2375,69 @@ productSelect.addEventListener("change", () => {
 });
 statusButton.addEventListener("click", checkService);
 
+// ===== 本地记录备份 / 恢复（合作进度·提醒·待办·身份设置） =====
+const BACKUP_KEYS = [
+  "kolSummaries", "kolThreads", "kolTodos",
+  "kolReminderSettings", "kolProactiveLang", "kolThreadsSchema"
+];
+function showBackupStatus(msg, ok) {
+  const el = document.getElementById("backup-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = ok === false ? "#c0392b" : "#2e7d32";
+  el.classList.remove("hidden");
+  setTimeout(() => el.classList.add("hidden"), 4000);
+}
+document.getElementById("backup-export").addEventListener("click", async () => {
+  try {
+    const data = await chrome.storage.local.get(BACKUP_KEYS);
+    const payload = { _type: "kol-backup", _version: 1, exportedAt: new Date().toISOString(), data };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `kol备份-${stamp}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    const n = Object.keys(data.kolSummaries || {}).length;
+    showBackupStatus(`已导出（合作进度 ${n} 条等）。文件存好，换电脑时导入。`, true);
+  } catch (e) {
+    showBackupStatus("导出失败：" + e.message, false);
+  }
+});
+document.getElementById("backup-import").addEventListener("click", () => {
+  document.getElementById("backup-file").click();
+});
+document.getElementById("backup-file").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!parsed || parsed._type !== "kol-backup" || !parsed.data) {
+      showBackupStatus("这不是 KOL 备份文件。", false);
+      return;
+    }
+    // 合并恢复：合作进度/提醒/待办按 key 合并，已有的不被空备份覆盖
+    const cur = await chrome.storage.local.get(BACKUP_KEYS);
+    const inc = parsed.data;
+    const merged = {};
+    ["kolSummaries", "kolThreads", "kolTodos"].forEach((k) => {
+      merged[k] = { ...(cur[k] || {}), ...(inc[k] || {}) };
+    });
+    ["kolReminderSettings", "kolProactiveLang", "kolThreadsSchema"].forEach((k) => {
+      if (inc[k] !== undefined) merged[k] = inc[k];
+    });
+    await chrome.storage.local.set(merged);
+    const n = Object.keys(merged.kolSummaries || {}).length;
+    showBackupStatus(`已恢复（合作进度 ${n} 条等）。`, true);
+  } catch (e) {
+    showBackupStatus("导入失败：" + e.message, false);
+  }
+});
+
 document.querySelectorAll("[data-copy]").forEach((button) => {
   button.addEventListener("click", async () => {
     const target = document.getElementById(button.dataset.copy);
