@@ -22,6 +22,7 @@ FILES=(
   reminders.html
   reminders.js
   knowledge.js
+  docx-import.js
   icon16.png
   icon48.png
   icon128.png

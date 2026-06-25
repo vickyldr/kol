@@ -3419,3 +3419,154 @@ initGuide();
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
 })();
+
+// ===================== 团队库 Word 导入（管理员） =====================
+(() => {
+  const panel = document.getElementById("kb-import-panel");
+  if (!panel) return;
+  const fileInput = document.getElementById("kb-import-file");
+  const statusEl = document.getElementById("kb-import-status");
+  const previewEl = document.getElementById("kb-import-preview");
+  const resultEl = document.getElementById("kb-import-result");
+  let parsed = null; // { records, images, summary }
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg;
+    statusEl.classList.remove("hidden");
+    statusEl.style.color =
+      kind === "error" ? "#c0392b" : kind === "ok" ? "#2e7d32" : "#555";
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+    );
+  }
+
+  document.getElementById("open-kb-import").addEventListener("click", () => {
+    panel.classList.toggle("hidden");
+    if (panel.classList.contains("hidden")) return;
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!isAdminUser()) {
+      setStatus(
+        "你不是管理员（没填管理员口令）：可以预览解析结果，但点确认导入时会被服务器拒绝。",
+        "error"
+      );
+    } else {
+      statusEl.classList.add("hidden");
+    }
+  });
+
+  document
+    .getElementById("kb-pick-file")
+    .addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", async (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    previewEl.classList.add("hidden");
+    previewEl.innerHTML = "";
+    resultEl.classList.add("hidden");
+    resultEl.innerHTML = "";
+    if (!/\.docx$/i.test(file.name)) {
+      setStatus("请选择 .docx 文件（Word）。老的 .doc 先在 Word 里另存为 .docx。", "error");
+      return;
+    }
+    setStatus(`正在你本地解析「${file.name}」…内容多/图片多时要等几秒。`, "info");
+    try {
+      const buf = await file.arrayBuffer();
+      parsed = await KOLDocxImport.parse(buf);
+      renderPreview(parsed.summary, file.name);
+    } catch (e) {
+      parsed = null;
+      setStatus("解析失败：" + (e && e.message ? e.message : e), "error");
+    }
+  });
+
+  function renderPreview(s, fileName) {
+    setStatus(`解析完成：${fileName}`, "ok");
+    const products = (s.products || []).map(esc).join("、") || "（未识别到产品标题）";
+    const regions = (s.regions || []).map(esc).join("、") || "（未识别到语种）";
+    previewEl.innerHTML =
+      '<div class="kb-preview-box">' +
+      '<div class="kb-stat-row">' +
+      `<span class="kb-stat"><b>${s.recordCount}</b> 条话术</span>` +
+      `<span class="kb-stat"><b>${s.tableCount}</b> 张表</span>` +
+      `<span class="kb-stat"><b>${s.imageCount}</b> 张示例图</span>` +
+      "</div>" +
+      `<p class="kb-mini"><b>产品：</b>${products}</p>` +
+      `<p class="kb-mini"><b>语种/地区：</b>${regions}</p>` +
+      '<div class="button-row">' +
+      '<button id="kb-confirm" class="primary" type="button">✅ 确认导入团队库</button>' +
+      '<button id="kb-cancel" class="secondary" type="button">取消</button>' +
+      "</div>" +
+      '<small style="color:#888">并进现有团队库（不是清空重来）：重复跳过、同场景内容变了由 AI 判保留哪版、示例图进物料库。旧库会自动备份。</small>' +
+      "</div>";
+    previewEl.classList.remove("hidden");
+    document.getElementById("kb-cancel").addEventListener("click", () => {
+      previewEl.classList.add("hidden");
+      parsed = null;
+      statusEl.classList.add("hidden");
+    });
+    document.getElementById("kb-confirm").addEventListener("click", confirmImport);
+  }
+
+  async function confirmImport() {
+    if (!parsed) return;
+    const btn = document.getElementById("kb-confirm");
+    btn.disabled = true;
+    setStatus(
+      `正在上传并入库…${parsed.summary.imageCount} 张图片体积较大，请稍候，期间别关侧边栏。`,
+      "info"
+    );
+    try {
+      const response = await fetch(`${API_BASE}/api/knowledge/import`, {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ records: parsed.records, images: parsed.images })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `服务器返回 ${response.status}`);
+      renderResult(data);
+      previewEl.classList.add("hidden");
+      parsed = null;
+    } catch (e) {
+      setStatus("导入失败：" + (e && e.message ? e.message : e), "error");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderResult(d) {
+    setStatus("导入完成 ✅", "ok");
+    const conf = (d.conflict_detail || [])
+      .slice(0, 12)
+      .map(
+        (c) =>
+          `<li>${esc(c.region)}·${esc(c.scene)} → <b>${
+            c.decision === "keep_old"
+              ? "保留旧版"
+              : c.decision === "merge"
+              ? "合并"
+              : "采用新版"
+          }</b>${c.reason ? `<span class="kb-mini2">（${esc(c.reason)}）</span>` : ""}</li>`
+      )
+      .join("");
+    resultEl.innerHTML =
+      '<div class="kb-preview-box">' +
+      '<div class="kb-stat-row">' +
+      `<span class="kb-stat">新增 <b>${d.added}</b></span>` +
+      `<span class="kb-stat">重复跳过 <b>${d.duplicates}</b></span>` +
+      `<span class="kb-stat">冲突 <b>${d.conflicts}</b></span>` +
+      `<span class="kb-stat">图片 <b>${d.images_saved}</b></span>` +
+      "</div>" +
+      `<p class="kb-mini">团队库：${d.before} → <b>${d.after}</b> 条${
+        d.backup ? `　·　已备份旧库 <code>${esc(d.backup)}</code>` : ""
+      }</p>` +
+      (conf
+        ? `<p class="kb-mini"><b>AI 对冲突的处理（前 12 条）：</b></p><ul class="kb-conflicts">${conf}</ul>`
+        : "") +
+      "</div>";
+    resultEl.classList.remove("hidden");
+  }
+})();

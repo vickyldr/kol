@@ -18,6 +18,7 @@
           <button id="open-reminders" class="status archive-entry" title="待回复 / 待跟进 / 待办提醒">🔔 提醒</button>
           <button id="open-archive" class="status archive-entry" title="查看已保存的话术库">📚 话术库</button>
           <button id="open-assets" class="status archive-entry" title="logo / 教程图 / 链接等物料">📎 物料库</button>
+          <button id="open-kb-import" class="status archive-entry" title="管理员：上传话术 Word 更新团队库">📥 团队库</button>
           <button id="service-status" class="status" title="点击重新检测">检测中</button>
         </div>
       </header>
@@ -425,6 +426,27 @@
         <div id="assets-list"></div>
       </section>
 
+      <section id="kb-import-panel" class="archive-panel hidden">
+        <div class="card-heading">
+          <div>
+            <span class="card-label">团队库导入</span>
+            <h2>上传话术 Word 更新团队库</h2>
+          </div>
+        </div>
+        <p class="guide-tip" style="margin:0 0 10px">
+          选一份话术 <b>.docx</b>，插件会在你电脑本地拆成一条条话术（按「产品 / 语种 / 场景」），
+          表格里的示例截图会进物料库。<b>重复</b>的自动跳过，<b>同场景内容变了</b>的由 AI 判断保留哪版。
+          导入前会自动备份旧库，导错可回滚。仅<b>管理员</b>可用。
+        </p>
+        <input id="kb-import-file" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" />
+        <div class="button-row">
+          <button id="kb-pick-file" type="button" class="primary">📄 选择 Word 文件</button>
+        </div>
+        <p id="kb-import-status" class="template-status hidden"></p>
+        <div id="kb-import-preview" class="hidden"></div>
+        <div id="kb-import-result" class="hidden"></div>
+      </section>
+
       <!-- ===================== 共用：话术库 + 保存弹窗 ===================== -->
       <section id="archive-panel" class="archive-panel hidden">
         <div class="card-heading">
@@ -481,6 +503,7 @@
       </dialog>
     </main>
     <script src="knowledge.js"></script>
+    <script src="docx-import.js"></script>
     <script src="sidepanel.js"></script>
   </body>
 </html>

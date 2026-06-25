@@ -65,7 +65,10 @@ function seedOrLive(name) {
   return path.join(SEED_DIR, name);
 }
 // 内置资料（出厂种子，可被 KOL_DATA_DIR 同名文件覆盖）：知识库、快捷模板、话术脚本。
-const KNOWLEDGE_PATH = seedOrLive("knowledge-base.json");
+// 知识库读取：每次动态判断「线上优先、否则种子」（首次导入后线上文件出现，同进程内即切到线上）。
+const knowledgeReadPath = () => seedOrLive("knowledge-base.json");
+// 知识库写入：永远写线上目录（DATA_DIR），绝不回写种子，避免污染代码仓库 / 被代码更新覆盖。
+const KNOWLEDGE_LIVE_PATH = path.join(DATA_DIR, "knowledge-base.json");
 const QUICK_TEMPLATES_PATH = seedOrLive("quick-templates.json");
 const PLAYBOOK_PATH = seedOrLive("playbook.json");
 // 用户数据：产品资料、话术存档（放持久目录，由团队在用中增改）。
@@ -365,7 +368,7 @@ async function analyzeWithQwen(payload) {
           required_variables: record.required_variables
         }
       })),
-      ...loadJson(KNOWLEDGE_PATH, [])
+      ...loadJson(knowledgeReadPath(), [])
     ],
     payload.message
   ), product);
@@ -1016,6 +1019,226 @@ function isAdmin(req) {
   return req.headers["x-kol-admin"] === ADMIN_TOKEN;
 }
 
+// ===================== Word 话术导入：合并 + AI 判重/冲突 + 图片入物料库 =====================
+
+// 一条话术内容的归一签名，用来判断「完全重复」（字段名+去空白后的值都一样）。
+function knowledgeSignature(fields) {
+  const obj = fields && typeof fields === "object" ? fields : {};
+  const norm = Object.keys(obj)
+    .sort()
+    .map((k) => [k, String(obj[k] || "").replace(/\s+/g, " ").trim()])
+    .filter(([, v]) => v);
+  return JSON.stringify(norm);
+}
+
+// 把新导入的话术并进现有库：完全相同→去重；同 stable_id 但内容变了→冲突（交 AI 判）；其余→新增。
+function mergeKnowledge(existing, incoming) {
+  const result = Array.isArray(existing) ? existing.slice() : [];
+  const idIndex = new Map();
+  const sigSet = new Set();
+  result.forEach((rec, i) => {
+    if (rec && rec.stable_id) idIndex.set(rec.stable_id, i);
+    sigSet.add(knowledgeSignature(rec && rec.fields));
+  });
+
+  let added = 0;
+  let duplicates = 0;
+  const conflicts = [];
+
+  for (const inc of incoming) {
+    if (!inc || !inc.fields || !Object.keys(inc.fields).length) continue;
+    const sig = knowledgeSignature(inc.fields);
+    const hitIdx = inc.stable_id != null ? idIndex.get(inc.stable_id) : undefined;
+    if (hitIdx != null) {
+      const old = result[hitIdx];
+      if (knowledgeSignature(old.fields) === sig) {
+        duplicates++; // 同 id 同内容
+      } else {
+        conflicts.push({ index: hitIdx, old, incoming: inc });
+      }
+      continue;
+    }
+    if (sigSet.has(sig)) {
+      duplicates++; // 内容完全相同（id 不同）
+      continue;
+    }
+    result.push(inc);
+    idIndex.set(inc.stable_id, result.length - 1);
+    sigSet.add(sig);
+    added++;
+  }
+
+  return { result, added, duplicates, conflicts };
+}
+
+const CONFLICT_AI_CAP = 60; // 单次最多送 AI 判这么多冲突，其余默认采用新版（避免一次烧太多额度）
+
+// 让 AI 对「同一场景、内容不一致」的冲突逐组判：保留旧 / 采用新 / 合并。没配 Key 时默认采用新版。
+async function reconcileConflicts(conflicts) {
+  const decisions = new Map(); // index -> { decision, fields, reason }
+  if (!conflicts.length) return decisions;
+
+  const aiBatch = conflicts.slice(0, CONFLICT_AI_CAP);
+  const overflow = conflicts.slice(CONFLICT_AI_CAP);
+  for (const c of overflow) {
+    decisions.set(c.index, {
+      decision: "take_new",
+      fields: c.incoming.fields,
+      reason: "冲突过多，超出本次 AI 判别上限，默认采用新版本"
+    });
+  }
+
+  if (!process.env.DASHSCOPE_API_KEY) {
+    for (const c of aiBatch) {
+      decisions.set(c.index, {
+        decision: "take_new",
+        fields: c.incoming.fields,
+        reason: "未配置 AI，默认采用新版本（新 Word 覆盖旧条目）"
+      });
+    }
+    return decisions;
+  }
+
+  const chunkSize = 6;
+  for (let i = 0; i < aiBatch.length; i += chunkSize) {
+    const chunk = aiBatch.slice(i, i + chunkSize);
+    const items = chunk.map((c, idx) => ({
+      ref: i + idx,
+      scene: c.incoming.scene || c.old.scene || "",
+      product: c.incoming.product || "",
+      region: c.incoming.region || "",
+      old_fields: c.old.fields,
+      new_fields: c.incoming.fields
+    }));
+    try {
+      const out = await callQwen({
+        system:
+          "你是 KOL 团队话术库的维护助手。下面每一组是同一个场景下「现有版本(old)」和「新导入版本(new)」内容不一致的冲突。" +
+          "请逐组判断如何处理，输出 JSON：{\"decisions\":[{\"ref\":数字,\"decision\":\"keep_old|take_new|merge\",\"fields\":{合并后的字段，仅 decision=merge 时给出},\"reason\":\"一句中文理由\"}]}。" +
+          "判断原则：新版本通常更新、更完整，一般采用新版(take_new)；若新版明显残缺、丢字段、像是误删，则保留旧版(keep_old)；若两版各有有用信息（如旧版多了备注、新版改了正文），则 merge 并给出合并后的 fields（保留两边都需要的字段，正文以新版为准）。只输出 JSON。",
+        user: JSON.stringify({ conflicts: items }),
+        maxTokens: 2000,
+        temperature: 0.1,
+        model: MODEL_FAST
+      });
+      const list = Array.isArray(out?.decisions) ? out.decisions : [];
+      for (const d of list) {
+        const c = chunk[d.ref - i];
+        if (!c) continue;
+        let fields = c.incoming.fields;
+        if (d.decision === "keep_old") fields = c.old.fields;
+        else if (d.decision === "merge" && d.fields && typeof d.fields === "object") {
+          fields = { ...c.old.fields, ...c.incoming.fields, ...d.fields };
+        }
+        decisions.set(c.index, {
+          decision: d.decision || "take_new",
+          fields,
+          reason: String(d.reason || "").slice(0, 120)
+        });
+      }
+    } catch (error) {
+      // AI 这批失败：默认采用新版，不阻断整体导入。
+      for (const c of chunk) {
+        decisions.set(c.index, {
+          decision: "take_new",
+          fields: c.incoming.fields,
+          reason: "AI 判别失败，默认采用新版本：" + (error.message || "")
+        });
+      }
+    }
+  }
+  return decisions;
+}
+
+// 把话术文档里的示例截图存进物料库；同一张图（内容相同）用内容哈希做 id，重复导入不会堆积。
+function importKnowledgeImages(images) {
+  const savedIds = new Set(); // 按内容哈希去重：同一张图被引用多次只算一张
+  let skipped = 0;
+  for (const img of images || []) {
+    if (!img || !img.dataBase64) {
+      skipped++;
+      continue;
+    }
+    try {
+      const buf = Buffer.from(img.dataBase64, "base64");
+      const hash = crypto.createHash("sha1").update(buf).digest("hex").slice(0, 12);
+      const id = "asset_kb_" + hash;
+      const label = `${img.region || img.product || "话术"}·${img.scene || "示例图"}`.slice(0, 80);
+      assetRecord({
+        id,
+        type: "image",
+        product: img.product || "通用",
+        name: label,
+        dataBase64: img.dataBase64,
+        ext: img.ext || "png",
+        notes: `话术文档导入｜${img.product || ""} / ${img.region || ""}`.trim()
+      });
+      savedIds.add(id);
+    } catch {
+      skipped++;
+    }
+  }
+  return { saved: savedIds.size, skipped };
+}
+
+async function importKnowledge(payload) {
+  const incoming = Array.isArray(payload.records) ? payload.records : [];
+  const images = Array.isArray(payload.images) ? payload.images : [];
+  if (!incoming.length && !images.length) {
+    const error = new Error("没有可导入的内容（解析出 0 条话术、0 张图片）。");
+    error.code = "EMPTY_IMPORT";
+    throw error;
+  }
+
+  const existing = loadJson(knowledgeReadPath(), []);
+
+  // 1) 先备份现有库，万一导错可回滚。
+  let backup = "";
+  if (Array.isArray(existing) && existing.length) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    backup = `knowledge-base.backup-${stamp}.json`;
+    try {
+      saveJson(path.join(DATA_DIR, backup), existing);
+    } catch {
+      backup = "";
+    }
+  }
+
+  // 2) 合并 + AI 判冲突。
+  const merged = mergeKnowledge(existing, incoming);
+  const decisions = await reconcileConflicts(merged.conflicts);
+  const conflictReport = [];
+  for (const c of merged.conflicts) {
+    const d = decisions.get(c.index) || { decision: "take_new", fields: c.incoming.fields, reason: "" };
+    if (d.decision !== "keep_old") merged.result[c.index].fields = d.fields;
+    conflictReport.push({
+      scene: c.incoming.scene || c.old.scene || "",
+      region: c.incoming.region || "",
+      decision: d.decision,
+      reason: d.reason
+    });
+  }
+
+  // 3) 写回团队库：永远写线上目录（DATA_DIR），不回写种子。
+  saveJson(KNOWLEDGE_LIVE_PATH, merged.result);
+
+  // 4) 图片进物料库。
+  const imageResult = importKnowledgeImages(images);
+
+  return {
+    ok: true,
+    before: Array.isArray(existing) ? existing.length : 0,
+    after: merged.result.length,
+    added: merged.added,
+    duplicates: merged.duplicates,
+    conflicts: conflictReport.length,
+    conflict_detail: conflictReport.slice(0, 50),
+    images_saved: imageResult.saved,
+    images_skipped: imageResult.skipped,
+    backup
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") return json(res, 204, {});
 
@@ -1105,6 +1328,18 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "缺少要删除的物料 id。" });
       }
       return json(res, 200, deleteAsset(payload.id));
+    }
+
+    // 团队库 Word 导入：侧边栏已在浏览器解析好，这里只做合并/判冲突/落库。仅管理员可用。
+    if (req.method === "POST" && req.url === "/api/knowledge/import") {
+      if (!isAdmin(req)) {
+        return json(res, 403, {
+          error: "只有管理员可以导入团队话术库。",
+          code: "FORBIDDEN"
+        });
+      }
+      const payload = await readBody(req);
+      return json(res, 200, await importKnowledge(payload));
     }
 
     if (req.method === "GET" && req.url.startsWith("/api/archive")) {
