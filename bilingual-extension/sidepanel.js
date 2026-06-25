@@ -2324,6 +2324,21 @@ initGuide();
     return Math.max(0, Math.floor((Date.now() - t) / 86400000));
   }
   function threadUrl(id) { return `https://www.instagram.com/direct/t/${id}/`; }
+  // 优先复用已打开的 IG 标签页（导航过去并聚焦），没有才开新标签
+  function openConversationTab(url) {
+    try {
+      chrome.tabs.query({ url: "*://*.instagram.com/*" }, (tabs) => {
+        if (tabs && tabs.length) {
+          chrome.tabs.update(tabs[0].id, { url, active: true });
+          if (tabs[0].windowId != null) chrome.windows.update(tabs[0].windowId, { focused: true });
+        } else {
+          chrome.tabs.create({ url });
+        }
+      });
+    } catch (e) {
+      chrome.tabs.create({ url });
+    }
+  }
 
   async function getLocal(keys) { return chrome.storage.local.get(keys); }
   async function setLocal(obj) { return chrome.storage.local.set(obj); }
@@ -2380,7 +2395,7 @@ initGuide();
       if (rec.needsReplyRaw && j.is_pleasantry !== true && rec.replyDismissedSig !== sig) {
         items.push({
           kind: "reply", key: recKey, threadId: rec.threadId, isGroup: rec.isGroup, title,
-          label: j.reminder_label || `等你回复`,
+          label: rec.needsReplyReason || j.reminder_label || `等你回复`,
           ai: j.ai_note || "",
           meta: `已搁置约 ${daysSince(rec.firstUnrepliedAt || rec.lastSeenAt)} 天 · 上次看到 ${fmt(rec.lastSeenAt)}`
         });
@@ -2495,7 +2510,7 @@ initGuide();
     if (it.kind !== "todo") {
       // 有数字ID就深链到对话；没有(只在列表见过、没点开过)就打开私信收件箱
       const url = it.threadId ? threadUrl(it.threadId) : "https://www.instagram.com/direct/inbox/";
-      actions.appendChild(btn("打开对话", () => chrome.tabs.create({ url })));
+      actions.appendChild(btn("打开对话", () => openConversationTab(url)));
     }
     if (it.kind === "reply") {
       actions.appendChild(btn("不用提醒了", () => dismissThread(it.key, "reply")));

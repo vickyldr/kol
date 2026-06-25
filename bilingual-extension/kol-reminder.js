@@ -28,8 +28,8 @@
   // 一次性清理：旧版按"数字对话ID"存的记账本，换成按名字存后，把旧数据清掉，
   // 避免残留那些 @一串数字 的脏提醒。清一次即可。
   chrome.storage.local.get("kolThreadsSchema").then((s) => {
-    if (s.kolThreadsSchema !== 2) {
-      chrome.storage.local.set({ kolThreads: {}, kolThreadsSchema: 2 });
+    if (s.kolThreadsSchema !== 3) {
+      chrome.storage.local.set({ kolThreads: {}, kolThreadsSchema: 3 });
     }
   });
 
@@ -71,7 +71,8 @@
       .replace(/[…\.]+$/g, "")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 24)
+      .replace(/^[^\p{L}\p{N}]+/u, "") // 去掉开头的 emoji/符号（🎵 等），让前缀对齐
+      .slice(0, 22)
       .trim()
       .toLowerCase();
   }
@@ -200,26 +201,20 @@
   }
 
   function conversationTitle() {
-    // 对话顶部标题栏的名字：右侧对话区最顶部那条短文字
-    const cands = document.querySelectorAll("span, h1, h2, div");
+    // 对话顶部标题栏的名字：右侧对话区"最顶一条"短文字（约 y<68，避免抓到消息气泡）
+    const cands = document.querySelectorAll("span, h1, h2");
     for (const el of cands) {
       const r = el.getBoundingClientRect();
-      if (r.top < 0 || r.top > 110) continue; // 只看顶部条
+      if (r.top < 0 || r.top > 68) continue; // 只看最顶的标题栏
       if (r.left < 360) continue; // 在右侧对话区，不是左边列表
-      if (el.childElementCount > 3) continue;
+      if (el.childElementCount > 2) continue;
       const t = (el.innerText || "").trim().split("\n")[0].trim();
       if (
         t && t.length > 1 && t.length < 80 &&
-        !/在线|online|active|新消息|new message/i.test(t)
+        !/在线|online|active|新消息|new message|正在输入|typing/i.test(t)
       ) {
         return t;
       }
-    }
-    // 退路：旧版 header
-    const header = document.querySelector('div[role="main"] header, main header');
-    if (header) {
-      const t = (header.innerText || "").split("\n")[0].trim();
-      if (t && t.length < 80) return t;
     }
     return "";
   }
@@ -267,10 +262,15 @@
       if (!key || seen.has(key)) return;
       seen.add(key);
       const preview = lines.slice(1).join(" ").slice(0, 120);
+      // 未读：只认真正的未读信号（"N new messages" / 蓝色未读圆点）。
+      // 不再用字重(isBold)——IG 名字几乎都是粗体，会把所有行误判成未读。
       const unread =
         /(\d+\s*new message|new messages|条新消息|未读)/i.test(text) ||
         hasUnreadDot(row);
-      const lastFromMe = /^\s*(you|您|你|me)\s*[:：]/i.test(preview);
+      // 最后一条是不是我发的：兼容"你: …""你发送了…""You: …""You sent…"
+      const lastFromMe = /^\s*(you|您|你|me)\s*[:：]/i.test(preview) ||
+        /^\s*你(发送了|已发送)/.test(preview) ||
+        /^\s*you\s+sent/i.test(preview);
       // 用名字归一化前缀当 key（id 字段沿用，后续代码不必大改）
       rows.push({ id: key, title, preview, unread, lastFromMe });
     });
@@ -527,9 +527,9 @@
           // 当前正打开的那条交给第 2 步精读，这里不用列表的粗判覆盖它
           if (openKey && row.id === openKey) return;
           const prev = map[row.id] || {};
-          // 列表判待回复：未读，或预览显示最后一条不是我发的
-          const inboxNeedsReply =
-            Boolean(row.unread) || (Boolean(row.preview) && !row.lastFromMe);
+          // 列表判待回复：只在真正"未读"时算，避免把你已回/已读的也报上来。
+          // "已读但没回"留给你点进对话时精读判断，不在列表瞎报。
+          const inboxNeedsReply = Boolean(row.unread) && !row.lastFromMe;
           // 显示名保留更长更完整的那个
           const title =
             (row.title || "").length > (prev.title || "").length ? row.title : (prev.title || row.title || "");
@@ -540,6 +540,7 @@
             lastMsgPreview: row.preview || prev.lastMsgPreview || "",
             unread: row.unread,
             needsReplyRaw: inboxNeedsReply,
+            needsReplyReason: inboxNeedsReply ? "未读 · 对方发了新消息" : "",
             lastSeenAt: nowIso()
           };
           // 「第一次发现没回」锚点：从"不是待回复"变成"待回复"时盖戳
@@ -552,13 +553,16 @@
       }
 
       // 2) 当前打开的对话：精读消息，判断待回复 + 触发 AI 判断
+      // 名字必须能和左边列表里某一行对上（防止把消息内容误当成对话名）。
+      const inboxKeys = new Set(inbox.map((r) => r.id));
       if (openTid) {
         const conv = readOpenConversation();
         const name = openName || (conv && conv.creatorName) || "";
         const key = titleKey(name);
-        if (conv && conv.messages.length && key) {
+        // key 对不上任何列表行 → 多半是抓错了名字（抓到消息了），跳过不建脏记录
+        if (conv && conv.messages.length && key && inboxKeys.has(key)) {
           const msgs = conv.messages;
-          // 待回复(原始启发式)：最后一条 creator 之后，没有我(me)的回复
+          // 待回复(精读)：最后一条 creator 之后，没有我(me)的回复
           let lastCreatorIdx = -1;
           msgs.forEach((m, i) => {
             if (m.from === "creator") lastCreatorIdx = i;
@@ -568,17 +572,21 @@
             msgs.slice(lastCreatorIdx + 1).some((m) => m.from === "me");
           const needsReplyRaw = lastCreatorIdx >= 0 && !myReplyAfter;
           const last = msgs[msgs.length - 1];
+          // 用列表里那条更完整的名字来显示
+          const inboxRow = inbox.find((r) => r.id === key);
+          const displayName = (inboxRow && inboxRow.title) || name;
 
           await upsertThread(
             key, // 用归一化名字当 key
             {
               threadId: openTid, // 数字ID，供"打开对话"深链
               isGroup: conv.isGroup,
-              creatorName: conv.creatorName || name,
-              title: name, // 完整名字用于显示
+              creatorName: conv.creatorName || displayName,
+              title: displayName, // 完整名字用于显示
               lastMsgFrom: last.from,
               lastMsgPreview: last.text.slice(0, 120),
               needsReplyRaw,
+              needsReplyReason: needsReplyRaw ? "对方最后发的，你还没回" : "",
               unread: false // 打开了就不算未读
             },
             msgs
