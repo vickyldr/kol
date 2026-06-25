@@ -39,10 +39,9 @@ const judgeCache = new TTLCache(3000, 3600 * 1000);
 const HOST = process.env.KOL_ASSISTANT_HOST || "127.0.0.1";
 const PORT = Number(process.env.KOL_ASSISTANT_PORT || 3210);
 const MODEL = process.env.DASHSCOPE_MODEL || "qwen-flash";
-// 按任务难度分流到不同模型：各模型有各自的免费额度，分流＝并行吃多份额度 + 难任务更准。
-// FAST：高频、不烧脑（翻译、提醒判断）→ 便宜快的 flash
-// SMART：低频、要聪明（分析、润色对外回复、问 AI）→ 更强的 plus
-// 想换具体型号改环境变量即可，例如 DASHSCOPE_MODEL_SMART=qwen3.7-plus
+// 分流原则：你要"等结果"的全用快模型；只有后台默默跑、你不等的，才用慢但聪明的。
+// FAST：翻译/分析/润色/问AI 等所有前台交互 → 快的 flash（体验优先）
+// SMART：只有后台提醒判断(judge) → 慢但聪明，顺便吃第二份免费额度，不影响你速度
 const MODEL_FAST = process.env.DASHSCOPE_MODEL_FAST || MODEL;
 const MODEL_SMART = process.env.DASHSCOPE_MODEL_SMART || "qwen-plus";
 // 团队口令：部署到 VPS 给团队用时设置，未设置则为本机单人模式（不校验）。
@@ -326,7 +325,7 @@ async function chatWithQwen(payload) {
       }))
       .filter((m) => m.content)
   ];
-  const answer = await chatQwen(messages, { maxTokens: 1200, temperature: 0.5, model: MODEL_SMART });
+  const answer = await chatQwen(messages, { maxTokens: 1200, temperature: 0.5, model: MODEL_FAST });
   return { answer };
 }
 
@@ -440,7 +439,7 @@ ${REPLY_STYLE}`;
 
   return normalizeAnalysis(
     await callQwen({
-      model: MODEL_SMART,
+      model: MODEL_FAST,
       system: systemPrompt,
       user: userPrompt,
       maxTokens: 3000,
@@ -544,7 +543,7 @@ async function judgeThread(payload) {
     }),
     maxTokens: 700,
     temperature: 0.1,
-    model: MODEL_FAST
+    model: MODEL_SMART
   });
 
   const toBool = (v) => v === true || v === "true";
@@ -572,7 +571,7 @@ async function judgeThread(payload) {
 async function askQwen(payload) {
   const product = findProduct(payload.productId);
   const result = await callQwen({
-    model: MODEL_SMART,
+    model: MODEL_FAST,
     system: `你是中国 KOL 运营人员的问答助手。回答用户针对当前红人消息提出的问题。
 必须忠于原文，特别检查主语、宾语、动作方向、时态和祈使句，不能把“对方要求我方发送”说成“对方已经发送/我方已经收到”。
 原文没有提供的上下文必须明确说不知道，不得虚构此前聊过什么。
@@ -601,7 +600,7 @@ async function rewriteReply(payload) {
       String(payload.replyLanguage || "").trim() ||
       String(payload.detectedLanguage || "").trim();
     const result = await callQwen({
-      model: MODEL_SMART,
+      model: MODEL_FAST,
       system: `你是翻译器。把运营给的中文准确翻译成目标语言。
 忠实原意、一字不改地传达：不增不减、不加问候语、不加结尾客套、不润色、不扩写、不改语气。
 准确保留主语、宾语、动作方向、时态、否定、数字和语气。
@@ -626,7 +625,7 @@ async function rewriteReply(payload) {
       String(payload.replyLanguage || "").trim() ||
       String(payload.detectedLanguage || "").trim();
     const result = await callQwen({
-      model: MODEL_SMART,
+      model: MODEL_FAST,
       system: `你是中国 KOL 运营人员的双语回复修改助手。
 运营给出当前的外语回复和一条修改要求，请在现有回复的基础上按要求改写。
 没有被要求改动的部分尽量保持不变，只动需要改的地方。
@@ -657,7 +656,7 @@ ${REPLY_STYLE}
 
   if (direction === "target_to_chinese") {
     const result = await callQwen({
-      model: MODEL_SMART,
+      model: MODEL_FAST,
       system: `你是 KOL 商务沟通翻译校对助手。
 将运营提供的外语回复忠实翻译成自然中文，供运营核对。
 严格保留价格、日期、数量、平台、授权、否定和语气，不得增加原文没有的承诺。
@@ -680,7 +679,7 @@ ${REPLY_STYLE}
     String(payload.detectedLanguage || "").trim();
 
   const result = await callQwen({
-    model: MODEL_SMART,
+    model: MODEL_FAST,
     system: `你是中国 KOL 运营人员的双语回复编辑器。
 运营会在中文框中输入两类内容之一：
 1. 可以直接发送的大致中文回复；
@@ -738,7 +737,7 @@ async function generateQuickTemplate(payload) {
   );
 
   const result = await callQwen({
-    model: MODEL_SMART,
+    model: MODEL_FAST,
     system: `你是中国 KOL 运营团队的主动话术生成器。
 filled_chinese_intent 是已经把运营填写的变量替换好的中文写作意图，请严格按它来生成回复。
 其中只有形如【请填写：变量名】的占位符才表示该信息缺失，必须原样保留、不能由你猜测。
@@ -778,7 +777,7 @@ ${REPLY_STYLE}
 
 async function alignReply(payload) {
   const result = await callQwen({
-    model: MODEL_SMART,
+    model: MODEL_FAST,
     system: `你是双语逐句对照助手。把运营给的外语回复按句子拆开，每个句子给出准确的中文对照，顺序与原文完全一致。
 不要漏句、不要把多句合并、不要改写或润色原文，只做切分和对照翻译。
 中文对照要忠实，准确保留主语、宾语、动作方向、时态、否定与语气。
