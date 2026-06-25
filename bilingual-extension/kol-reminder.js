@@ -185,6 +185,36 @@
     return { messages: messages.slice(-limit), isGroup, creatorName };
   }
 
+  // 滚动累积缓冲：你往上滚加载出更老的消息时，把它们累加进来，
+  // 这样不用一次性看到全部、也不靠 IG 复制粘贴，就能攒齐整段历史。
+  let convBuffer = { tid: "", messages: [] };
+  function msgSig(m) { return m.from + "|" + m.text; }
+  function mergeIntoBuffer(current) {
+    if (!current || !current.length) return;
+    if (!convBuffer.messages.length) { convBuffer.messages = current.slice(); return; }
+    const bufSigs = convBuffer.messages.map(msgSig);
+    const curSigs = current.map(msgSig);
+    const firstOverlap = curSigs.findIndex((s) => bufSigs.includes(s));
+    if (firstOverlap === -1) {
+      // 完全不重叠（跳得太远）：去重后直接追加
+      current.forEach((m) => { if (!bufSigs.includes(msgSig(m))) convBuffer.messages.push(m); });
+      return;
+    }
+    // current 开头那段是 buffer 之前的更老消息 → 前插
+    const olderPrefix = current.slice(0, firstOverlap).filter((m) => !bufSigs.includes(msgSig(m)));
+    if (olderPrefix.length) convBuffer.messages = olderPrefix.concat(convBuffer.messages);
+    // current 末尾若有 buffer 之后的更新消息 → 追加
+    const lastBufSig = bufSigs[bufSigs.length - 1];
+    const lastBufInCur = curSigs.lastIndexOf(lastBufSig);
+    if (lastBufInCur !== -1 && lastBufInCur < curSigs.length - 1) {
+      const have = new Set(convBuffer.messages.map(msgSig));
+      const newerSuffix = current.slice(lastBufInCur + 1).filter((m) => !have.has(msgSig(m)));
+      if (newerSuffix.length) convBuffer.messages = convBuffer.messages.concat(newerSuffix);
+    }
+    // 安全上限，防止极长对话占内存
+    if (convBuffer.messages.length > 600) convBuffer.messages = convBuffer.messages.slice(-600);
+  }
+
   // 群聊里每条消息上方通常有发送者名字；尽量往上找一个短文本当名字
   function senderNameFor(el) {
     let row = el;
@@ -556,6 +586,11 @@
       // 名字必须能和左边列表里某一行对上（防止把消息内容误当成对话名）。
       const inboxKeys = new Set(inbox.map((r) => r.id));
       if (openTid) {
+        // 滚动累积：换了对话就清空缓冲；把当前屏幕渲染出的消息累加进缓冲
+        if (convBuffer.tid !== openTid) convBuffer = { tid: openTid, messages: [] };
+        const fullView = readOpenConversation(500);
+        if (fullView && fullView.messages.length) mergeIntoBuffer(fullView.messages);
+
         const conv = readOpenConversation();
         const name = openName || (conv && conv.creatorName) || "";
         const key = titleKey(name);
@@ -632,13 +667,19 @@
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type !== "KOL_GET_CONVERSATION") return;
     try {
+      const tid = currentThreadId();
       const conv = readOpenConversation(80);
       const name = conversationTitle() || (conv && conv.creatorName) || "";
+      // 优先返回"滚动累积"的完整缓冲(你往上滚攒下的全部)；缓冲对不上才用当前屏
+      const accumulated =
+        tid && convBuffer.tid === tid && convBuffer.messages.length
+          ? convBuffer.messages
+          : (conv ? conv.messages : []);
       sendResponse({
         key: titleKey(name),
         name,
         isGroup: conv ? conv.isGroup : false,
-        messages: conv ? conv.messages : []
+        messages: accumulated
       });
     } catch (e) {
       sendResponse({ key: "", name: "", messages: [] });
