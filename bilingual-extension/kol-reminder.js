@@ -215,13 +215,28 @@
       const lines = text.split("\n").map((s) => s.trim()).filter(Boolean);
       const title = lines[0] || "";
       const preview = lines.slice(1).join(" ").slice(0, 120);
-      // 未读启发式：整行字重偏粗，或行内有未读圆点的 aria 标记
+      // 未读启发式：aria 标记 / 行内有蓝色未读小圆点 / 整行字重偏粗
       const unread =
-        /未读|Unread/i.test(container.getAttribute("aria-label") || "") ||
+        /未读|Unread|new message/i.test(container.getAttribute("aria-label") || "") ||
+        hasUnreadDot(container) ||
         isBold(container);
-      rows.push({ id, title, preview, unread });
+      // 预览里最后一条是不是"我发的"：IG 会给我方消息加"你:/You:"前缀
+      const lastFromMe = /^\s*(you|您|你|me)\s*[:：]/i.test(preview);
+      rows.push({ id, title, preview, unread, lastFromMe });
     });
     return rows;
+  }
+
+  // 行内找一个蓝色的小圆点（IG 未读指示）
+  function hasUnreadDot(container) {
+    const els = container.querySelectorAll("div, span");
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.width < 16 && r.height > 0 && r.height < 16) {
+        if (isBlueLike(getComputedStyle(el).backgroundColor)) return true;
+      }
+    }
+    return false;
   }
 
   function isBold(container) {
@@ -385,21 +400,35 @@
   async function scan() {
     if (!settings.enabled || !inDirect()) return;
     try {
-      // 1) 收件箱列表：把你划过的对话都记一笔（标题/未读）
+      // 1) 收件箱列表：把你划过的对话都记一笔。
+      //    关键：只在列表里看到「未读」或「最后一条不是我发的」，就算待回复，
+      //    不用你点进对话——这样"红人发了、我只瞄了一眼没点开"也能提醒。
       const inbox = scanInbox();
+      const openId = currentThreadId();
       if (inbox.length) {
         const map = await getThreads();
         let changed = false;
         inbox.forEach((row) => {
+          // 当前正打开的那条交给第 2 步精读，这里不用列表的粗判覆盖它
+          if (row.id === openId) return;
           const prev = map[row.id] || {};
-          map[row.id] = {
+          // 列表判待回复：未读，或预览显示最后一条不是我发的
+          const inboxNeedsReply =
+            Boolean(row.unread) || (Boolean(row.preview) && !row.lastFromMe);
+          const next = {
             ...prev,
             threadId: row.id,
             title: row.title || prev.title || "",
             inboxPreview: row.preview || prev.inboxPreview || "",
+            lastMsgPreview: row.preview || prev.lastMsgPreview || "",
             unread: row.unread,
+            needsReplyRaw: inboxNeedsReply,
             lastSeenAt: nowIso()
           };
+          // 「第一次发现没回」锚点：从"不是待回复"变成"待回复"时盖戳
+          if (inboxNeedsReply && !prev.needsReplyRaw) next.firstUnrepliedAt = nowIso();
+          if (!inboxNeedsReply) next.firstUnrepliedAt = null;
+          map[row.id] = next;
           changed = true;
         });
         if (changed) await saveThreads(map);
