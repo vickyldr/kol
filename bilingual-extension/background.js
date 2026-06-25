@@ -118,6 +118,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+// 代发 /api/parse-todo：把一句话解析成事项+时间（供会话内"已约好"用）
+async function handleParseTodo(payload) {
+  const { kolConfig } = await chrome.storage.local.get("kolConfig");
+  const base = kolConfig?.apiBase || "http://106.54.206.174:3210";
+  const token = kolConfig?.token || "";
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["X-KOL-Token"] = token;
+  const response = await fetch(`${base}/api/parse-todo`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(20000)
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "解析失败");
+  return body;
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "KOL_PARSE_TODO") return;
+  handleParseTodo(message.payload)
+    .then(sendResponse)
+    .catch((error) => sendResponse({ error: error.message || "解析失败" }));
+  return true;
+});
+
 const REMINDER_ALARM = "kol-reminder-tick";
 function ensureAlarm() {
   chrome.alarms.create(REMINDER_ALARM, { periodInMinutes: 60 }); // 每小时查一次

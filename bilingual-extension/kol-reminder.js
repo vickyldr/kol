@@ -373,15 +373,35 @@
     if (el) el.remove();
   }
 
+  // 给这个会话「永久静音」DDL 提示（处理过了就别再烦），并可顺手建待办
+  async function silenceDdl(id) {
+    const m = await getThreads();
+    if (m[id]) {
+      m[id].ddlSilenced = true;
+      await saveThreads(m);
+    }
+  }
+  async function addTodo(text, dueAt, threadId) {
+    const s = await chrome.storage.local.get("kolTodos");
+    const todos = s.kolTodos || [];
+    todos.push({ id: "t" + Date.now() + Math.floor(performance.now()), text, dueAt, threadId: threadId || "", done: false, dismissed: false });
+    await chrome.storage.local.set({ kolTodos: todos });
+  }
+  function plusDaysIso(days) {
+    return new Date(Date.now() + days * 86400000).toISOString();
+  }
+
   async function maybeRenderDeadlineHint(id, judge) {
     if (id !== titleKey(conversationTitle())) return; // 只在当前打开的会话里提示（按 key 匹配）
     removeHint();
     if (!judge || !judge.should_ask_deadline) return;
 
-    // 这个会话的这个阶段被「这次不用」过就别再弹
+    // 这个会话处理过 DDL（约好了/已问/这次不用）就永久不再弹
     const map = await getThreads();
     const rec = map[id] || {};
-    if (rec.ddlHintDismissedStage && rec.ddlHintDismissedStage === judge.stage) return;
+    if (rec.ddlSilenced) return;
+    const name = rec.title || conversationTitle() || "这个红人";
+    const threadId = rec.threadId || "";
 
     const box = document.querySelector('div[role="textbox"], textarea[placeholder]');
     const footer = box ? box.closest("form, div") : null;
@@ -392,7 +412,7 @@
     hint.className = "kol-ddl-hint";
     const tip = document.createElement("div");
     tip.className = "kol-ddl-tip";
-    tip.textContent = "⏰ 还没和 TA 约交稿时间，顺手问一下吧";
+    tip.textContent = "⏰ 还没和 TA 约交稿时间";
     hint.appendChild(tip);
 
     const askText =
@@ -401,24 +421,67 @@
     const defaultText =
       "Hi! We usually plan around 3 days for the first draft — does that work for you?（默认约 3 天交稿）";
 
-    hint.appendChild(makeHintBtn("插入「问档期」", () => insertIntoBox(askText)));
-    hint.appendChild(makeHintBtn("插入「默认3天」", () => insertIntoBox(defaultText)));
-    hint.appendChild(
-      makeHintBtn("这次不用", async () => {
-        removeHint();
-        const m2 = await getThreads();
-        if (m2[id]) {
-          m2[id].ddlHintDismissedStage = judge.stage;
-          await saveThreads(m2);
-        }
-      })
-    );
+    // 插入「问档期」：填话术 + 自动建一条"等对方回交稿时间"的待办，并静音
+    hint.appendChild(makeHintBtn("插入「问档期」", async () => {
+      insertIntoBox(askText);
+      await addTodo(`等 ${name} 回交稿时间`, plusDaysIso(1), threadId);
+      await silenceDdl(id);
+      removeHint();
+    }));
+    // 插入「默认3天」：填话术 + 自动建"约了3天，到期检查"的待办，并静音
+    hint.appendChild(makeHintBtn("插入「默认3天」", async () => {
+      insertIntoBox(defaultText);
+      await addTodo(`${name} 约3天交稿，到期检查`, plusDaysIso(3), threadId);
+      await silenceDdl(id);
+      removeHint();
+    }));
+    // 我已约好/已问：填一个时间 → 自动建待办 + 静音
+    hint.appendChild(makeHintBtn("✅ 已约好/已问…", () => showDdlRecord(hint, id, name, threadId)));
+    // 这次不用：永久静音这个会话的 DDL 提示
+    hint.appendChild(makeHintBtn("这次不用", async () => {
+      await silenceDdl(id);
+      removeHint();
+    }));
 
     if (footer && footer.parentElement) {
       footer.parentElement.insertBefore(hint, footer);
     } else {
       anchor.appendChild(hint);
     }
+  }
+
+  // 展开"已约好"的小输入：打一句时间 → AI 解析 → 建待办 + 静音
+  function showDdlRecord(hint, id, name, threadId) {
+    if (hint.querySelector(".kol-ddl-record")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "kol-ddl-record";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "约定何时交？如 3天后 / 周五 / 6月30日";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "kol-ddl-btn";
+    save.textContent = "记进待办";
+    save.addEventListener("click", async () => {
+      const sentence = input.value.trim();
+      if (!sentence) { input.focus(); return; }
+      save.disabled = true;
+      save.textContent = "解析中…";
+      let dueAt = plusDaysIso(3);
+      try {
+        const r = await chrome.runtime.sendMessage({ type: "KOL_PARSE_TODO", payload: { sentence, now: new Date().toISOString() } });
+        if (r && r.date) {
+          const d = new Date(`${r.date}T${(r.time || "10:00")}:00`);
+          if (!isNaN(d)) dueAt = d.toISOString();
+        }
+      } catch (e) { /* 解析失败用默认3天 */ }
+      await addTodo(`${name} 交稿（约定：${sentence}）`, dueAt, threadId);
+      await silenceDdl(id);
+      removeHint();
+    });
+    wrap.append(input, save);
+    hint.appendChild(wrap);
+    input.focus();
   }
 
   function makeHintBtn(label, onClick) {

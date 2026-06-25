@@ -31,3 +31,5 @@
 .kol-ddl-btn:hover {
   background: #ffdf8c;
 }
+.kol-ddl-record { display: flex; flex-basis: 100%; gap: 6px; margin-top: 6px; }
+.kol-ddl-record input { flex: 1 1 auto; border: 1px solid #d9a93c; border-radius: 8px; padding: 5px 9px; font-size: 13px; }
