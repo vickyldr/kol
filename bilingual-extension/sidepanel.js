@@ -31,6 +31,7 @@ async function loadConfig() {
 }
 
 const messageInput = document.getElementById("message");
+const replyIntentInput = document.getElementById("reply-intent");
 const contextInput = document.getElementById("context");
 const operatorGoalInput = document.getElementById("operator-goal");
 const productSelect = document.getElementById("product");
@@ -1958,8 +1959,8 @@ function showAskAnswer(text) {
 // 「这是什么意思」=看懂；「这怎么办」=出主意。两者都自动带上下文。
 // 忠实翻译 / 润色生成：只把你写的中文翻成外语，绝不自动抓对话、不脑补
 async function doReply(mode) {
-  const text = messageInput.value.trim();
-  if (!text) { messageInput.focus(); return; }
+  const text = replyIntentInput.value.trim();
+  if (!text) { replyIntentInput.focus(); return; }
   if (!serviceOnline) {
     errorBox.textContent = "千问服务尚未连接。";
     errorBox.classList.remove("hidden");
@@ -1982,7 +1983,8 @@ async function doReply(mode) {
     const body = await postRewrite({
       direction: mode === "faithful" ? "faithful" : "chinese_to_target",
       message: "",
-      context: contextInput.value.trim(), // 只用手动填的，不自动抓
+      // 把红人原文当上下文，回复更贴题（不再用单独的上下文框）
+      context: messageInput.value.trim(),
       productId: productSelect.value,
       detectedLanguage: "",
       replyLanguage: replyLanguageSelect?.value || "",
@@ -2003,7 +2005,7 @@ async function doReply(mode) {
 
 // 这是什么意思 = 纯翻译（任何外语 → 中文；红人的、你自己的、AI 给你的都行）
 async function askMeaningTranslate() {
-  const text = messageInput.value.trim();
+  const text = messageInput.value.trim() || replyIntentInput.value.trim();
   if (!text) { messageInput.focus(); return; }
   if (!serviceOnline) {
     errorBox.textContent = "千问服务尚未连接。";
@@ -2039,8 +2041,9 @@ async function askMeaningTranslate() {
 }
 
 async function askAboutMessage(mode) {
-  const text = messageInput.value.trim();
-  if (!text) { messageInput.focus(); return; }
+  // 「这怎么办」的疑问写在第二框；为空时退回用红人原文
+  const text = replyIntentInput.value.trim() || messageInput.value.trim();
+  if (!text) { replyIntentInput.focus(); return; }
   if (!serviceOnline) {
     errorBox.textContent = "千问服务尚未连接。";
     errorBox.classList.remove("hidden");
@@ -2053,14 +2056,17 @@ async function askAboutMessage(mode) {
   errorBox.classList.add("hidden");
   try {
     const autoCtx = await getConversationContext();
-    const context = [contextInput.value.trim(), autoCtx].filter(Boolean).join("\n");
+    const yuanwen = messageInput.value.trim();
+    const context = [yuanwen ? "红人原文：" + yuanwen : "", autoCtx]
+      .filter(Boolean)
+      .join("\n");
     let question, msg;
     if (mode === "meaning") {
       // 看懂：text 是看不懂的那条消息
       question = "请用大白话中文逐句讲清楚这条消息是什么意思，包括可能的言外之意/潜台词。如果结合上下文有更准的理解，请据此说明。";
       msg = text;
     } else {
-      // 出主意：text 是运营的问题（这个人死活不同意怎么办）
+      // 出主意：text 是运营的疑问（这个人死活不同意怎么办）
       question = text;
       msg = "";
     }

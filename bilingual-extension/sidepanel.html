@@ -135,14 +135,14 @@
         </details>
 
         <section class="input-card">
-          <label for="message">要处理的文字</label>
-          <textarea id="message" rows="5" placeholder="① 想回复：写你要说的中文 → 点「忠实翻译」或「润色生成」&#10;② 看不懂：把外语（红人的 / AI 给你的都行）粘进来 → 点「这是什么意思」&#10;③ 拿不准：直接问，例如「这个人死活不同意怎么办？」→ 点「这怎么办」"></textarea>
+          <label for="message">红人发来的原文（外语 · 看不懂就贴这）</label>
+          <textarea id="message" rows="3" placeholder="把红人的外语消息粘进来 → 点「这是什么意思」翻成中文。&#10;只想翻译、不回复的话，填这一个就够了。"></textarea>
+
+          <label for="reply-intent">我想回复（中文）</label>
+          <textarea id="reply-intent" rows="3" placeholder="写你想对红人说的中文 → 点「忠实翻译」照原话翻，或「润色生成」让 AI 润色得更自然。&#10;拿不准怎么说？把疑问写这里 → 点「这怎么办」，AI 结合对话给主意。"></textarea>
+
           <input id="operator-goal" type="text" class="hidden" />
-          <details class="context-box">
-            <summary>给「这怎么办」补充上下文（可选）</summary>
-            <label for="context">「这怎么办」会自动看当前对话；想更准可把对话粘进来</label>
-            <textarea id="context" rows="4" placeholder="把对话整段复制粘贴到这里……（仅「这怎么办」用；翻译/生成不会自动抓上下文）"></textarea>
-          </details>
+          <textarea id="context" class="hidden"></textarea>
           <div class="button-row">
             <button id="do-faithful" class="secondary">🔤 忠实翻译</button>
             <button id="do-polish" class="primary">📝 润色生成</button>
@@ -164,8 +164,8 @@
 
         <section id="empty-state" class="empty-state">
           <div class="empty-icon">↗</div>
-          <p>粘贴红人的话 → 生成回复；看不懂点「这是什么意思」；拿不准点「这怎么办」。</p>
-          <small>工具会判断对方意图、匹配话术并给出中英文回复。</small>
+          <p>看不懂红人的话 → 第一框贴原文点「这是什么意思」；想回复 → 第二框写中文点「润色生成」；拿不准 → 第二框写疑问点「这怎么办」。</p>
+          <small>工具会结合对话给出中英文回复与建议。</small>
         </section>
 
         <section id="result" class="result hidden">
