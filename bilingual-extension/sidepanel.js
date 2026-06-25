@@ -2162,20 +2162,22 @@ initGuide();
   // —— 身份设置 ——
   async function loadSettings() {
     const s = (await getLocal(SETTINGS_KEY))[SETTINGS_KEY] || {};
-    // 我的产品下拉：克隆主产品下拉 + 一个空选项
+    const prefixes = (s.productPrefixes && s.productPrefixes.length)
+      ? s.productPrefixes
+      : DEFAULT_PREFIXES;
+    // 我的产品下拉：直接来自产品前缀清单（recco/rythmix/aicatch/vivavideo）
     myProductSel.replaceChildren();
     const blank = document.createElement("option");
     blank.value = ""; blank.textContent = "（未选）";
     myProductSel.appendChild(blank);
-    Array.from(document.getElementById("product").options).forEach((o) => {
-      if (o.value === "generic") return;
+    prefixes.forEach((p) => {
       const opt = document.createElement("option");
-      opt.value = o.value; opt.textContent = o.textContent;
+      opt.value = p; opt.textContent = p;
       myProductSel.appendChild(opt);
     });
     myProductSel.value = s.myProduct || "";
     myHandleInput.value = s.myHandle || "";
-    prefixInput.value = (s.productPrefixes || DEFAULT_PREFIXES).join(", ");
+    prefixInput.value = prefixes.join(", ");
     enabledInput.checked = s.enabled !== false;
   }
 
@@ -2199,7 +2201,12 @@ initGuide();
     Object.values(threads || {}).forEach((rec) => {
       if (!rec || rec.muted) return;
       const j = rec.judge || {};
-      const title = rec.title || rec.creatorName || rec.threadId;
+      // 名字优先；抓不到名字时用消息预览，绝不甩一串对话 ID 给用户
+      const looksLikeId = (x) => /^\d{6,}$/.test(String(x || ""));
+      let title = rec.title || rec.creatorName || "";
+      if (looksLikeId(title)) title = "";
+      if (!title) title = (rec.inboxPreview || rec.lastMsgPreview || "").slice(0, 24);
+      if (!title) title = "未命名对话";
       const sig = rec.judgeSignature || "";
       if (rec.needsReplyRaw && j.is_pleasantry !== true && rec.replyDismissedSig !== sig) {
         items.push({
@@ -2295,7 +2302,7 @@ initGuide();
     el.className = `reminder-card ${it.kind}`;
     const t = document.createElement("div");
     t.className = "rc-title";
-    t.textContent = (it.kind === "todo" ? "📝 " : "@") + (it.title || "");
+    t.textContent = (it.kind === "todo" ? "📝 " : "") + (it.title || "");
     el.appendChild(t);
     if (it.label) {
       const l = document.createElement("div");

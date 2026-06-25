@@ -213,7 +213,12 @@
       const text = (container.innerText || "").trim();
       if (!text) return;
       const lines = text.split("\n").map((s) => s.trim()).filter(Boolean);
-      const title = lines[0] || "";
+      const aria = (container.getAttribute("aria-label") || "").trim();
+      // 名字：取首行；首行像时间/数字则退而用 aria-label
+      let title = lines[0] || aria || "";
+      if (/^\d[\d\s:·]*$/.test(title) || /^\d+(小时|分钟|天|周)/.test(title)) {
+        title = aria || "";
+      }
       const preview = lines.slice(1).join(" ").slice(0, 120);
       // 未读启发式：aria 标记 / 行内有蓝色未读小圆点 / 整行字重偏粗
       const unread =
@@ -451,12 +456,16 @@
           const needsReplyRaw = lastCreatorIdx >= 0 && !myReplyAfter;
           const last = msgs[msgs.length - 1];
 
+          // 名字优先用左边列表里这条的名字（最可靠），其次对话标题/红人名
+          const inboxRow = inbox.find((r) => r.id === id) || {};
+          const name = inboxRow.title || conversationTitle() || conv.creatorName || "";
+
           await upsertThread(
             id,
             {
               isGroup: conv.isGroup,
-              creatorName: conv.creatorName,
-              title: conv.creatorName || conversationTitle() || "",
+              creatorName: conv.creatorName || name,
+              title: name,
               lastMsgFrom: last.from,
               lastMsgPreview: last.text.slice(0, 120),
               needsReplyRaw,
