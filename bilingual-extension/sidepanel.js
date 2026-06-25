@@ -1966,6 +1966,11 @@ async function doReply(mode) {
     errorBox.classList.remove("hidden");
     return;
   }
+  const redText = messageInput.value.trim(); // 红人原文
+  // 回复语言：手选优先；没选时——有红人原文就跟随红人语言（服务端识别），
+  // 没有红人原文就退回你设置的「常用语言」，避免翻译不出来只剩中文。
+  const pickedLang = (replyLanguageSelect?.value || "").trim();
+  const fallbackLang = pickedLang || (redText ? "" : (targetLanguage?.value || "").trim());
   const btn = document.getElementById(mode === "faithful" ? "do-faithful" : "do-polish");
   const orig = btn.textContent;
   btn.disabled = true;
@@ -1973,8 +1978,6 @@ async function doReply(mode) {
   errorBox.classList.add("hidden");
   const biBox = document.getElementById("bi-split");
   if (biBox) biBox.innerHTML = '<div class="bi-loading">处理中…</div>';
-  const ab = document.getElementById("analysis-block");
-  if (ab) ab.classList.add("hidden");
   const aa = document.getElementById("ask-answer");
   if (aa) aa.classList.add("hidden");
   emptyState.classList.add("hidden");
@@ -1982,12 +1985,12 @@ async function doReply(mode) {
   try {
     const body = await postRewrite({
       direction: mode === "faithful" ? "faithful" : "chinese_to_target",
-      message: "",
-      // 把红人原文当上下文，回复更贴题（不再用单独的上下文框）
-      context: messageInput.value.trim(),
+      // 把红人原文同时作为 message + context：服务端据此识别要翻成的语言
+      message: redText,
+      context: redText,
       productId: productSelect.value,
       detectedLanguage: "",
-      replyLanguage: replyLanguageSelect?.value || "",
+      replyLanguage: fallbackLang,
       replyChinese: text
     });
     replyTargetInput.value = body.reply_target || "";
@@ -2000,6 +2003,43 @@ async function doReply(mode) {
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
+  }
+  // 有红人原文时，后台补上「识别 & 内部提醒」深层分析（不挡回复）
+  runDeepAnalysis(redText);
+}
+
+// 后台跑红人消息的深层分析，填进下方折叠的「识别 & 内部提醒」
+async function runDeepAnalysis(redText) {
+  const ab = document.getElementById("analysis-block");
+  if (!ab) return;
+  if (!redText || !serviceOnline) { ab.classList.add("hidden"); return; }
+  const summary = document.getElementById("analysis-summary");
+  if (summary) summary.textContent = "识别 & 内部提醒（分析中…）";
+  ab.classList.remove("hidden");
+  try {
+    const autoCtx = await getConversationContext();
+    const payload = {
+      message: redText,
+      productId: productSelect.value,
+      context: [redText, autoCtx].filter(Boolean).join("\n"),
+      replyLanguage: replyLanguageSelect?.value || "",
+      channel: "Instagram"
+    };
+    const r = await fetch(`${API_BASE}/api/analyze`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(65000)
+    });
+    const b = await r.json();
+    if (b && !b.error) {
+      renderAnalysis(b);
+      if (summary) summary.textContent = "识别 & 内部提醒";
+    } else if (summary) {
+      summary.textContent = "识别 & 内部提醒（分析未完成）";
+    }
+  } catch (e) {
+    if (summary) summary.textContent = "识别 & 内部提醒（分析未完成）";
   }
 }
 
