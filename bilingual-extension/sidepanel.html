@@ -109,25 +109,29 @@
       <!-- ===================== 板块 A：红人来消息 ===================== -->
       <section id="panel-reactive" class="mode-panel">
         <details id="coop-card" class="coop-card">
-          <summary>📋 当前合作情况（离开对话会自动更新 · 也可手动）</summary>
+          <summary>📋 当前合作情况</summary>
 
-          <p class="coop-auto-note">💡 平时不用管：你正常看对话、切走时，进展会自动更新到下面 ③。想立刻更新或补内容，才用下面 ①②。</p>
-
-          <div class="coop-step">① （想立刻更新才用）导入对话</div>
+          <div class="coop-step">① 导入对话（像截图一样，一段段抓）</div>
+          <p class="coop-tip">在 IG 里滚到对话最上面 → 点「抓取这屏」→ 往下滚一点 → 再点 → 一直到底。每点一次把这一屏加进来（重复的会自动去掉）。</p>
           <div class="coop-actions">
-            <button id="coop-grab" type="button" class="secondary">📥 抓取整段（点一下即可）</button>
-            <button id="coop-done" type="button" class="coop-done-btn">✅ 此合作已完结·不再提醒</button>
+            <button id="coop-grab" type="button" class="primary">📸 抓取这屏</button>
+            <button id="coop-clear" type="button" class="secondary">清空</button>
+            <button id="coop-done" type="button" class="coop-done-btn">✅ 已完结·不再提醒</button>
           </div>
-          <textarea id="coop-import" rows="4" placeholder="点「抓取」把整段对话一次性拉进来（在 IG 滚过一遍更全）；也可以自己复制粘贴，可分多次粘。"></textarea>
+          <textarea id="coop-import" rows="4" placeholder="一段段抓进来的对话会显示在这（也可以自己复制粘贴）。"></textarea>
 
-          <div class="coop-step">② 生成 / 更新小结</div>
+          <div class="coop-step">② 生成 / 更新进展</div>
           <div class="coop-actions">
-            <button id="coop-refresh" type="button" class="primary">🔄 总结这段对话</button>
+            <button id="coop-refresh" type="button" class="primary">🔄 总结成进展清单</button>
             <span id="coop-meta" class="coop-meta"></span>
           </div>
 
-          <div class="coop-step">③ 合作进展（自动更新 · 也可自己改、自己加）</div>
-          <textarea id="coop-text" rows="8" placeholder="离开对话会自动更新到这里；也可以自己改、自己加一行。"></textarea>
+          <div class="coop-step">
+            ③ 合作进展
+            <button id="coop-edit" type="button" class="coop-edit-btn">✏️ 改</button>
+          </div>
+          <div id="coop-rendered" class="coop-rendered"><span class="coop-empty">还没有进展，先抓取对话→总结。</span></div>
+          <textarea id="coop-text" class="hidden" rows="9" placeholder="一行一条，开头用 ✅ 或 ⬜；改完点上面「✏️ 改」收起。"></textarea>
         </details>
 
         <section class="input-card">

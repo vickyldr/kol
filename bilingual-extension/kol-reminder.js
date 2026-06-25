@@ -701,6 +701,7 @@
     try {
       const tid = currentThreadId();
       const conv = readOpenConversation(80);
+      const currentView = readOpenConversation(500); // 当前屏幕渲染出的（给逐段抓取用）
       const name = conversationTitle() || (conv && conv.creatorName) || "";
       // 优先返回"滚动累积"的完整缓冲(你往上滚攒下的全部)；缓冲对不上才用当前屏
       const accumulated =
@@ -711,7 +712,8 @@
         key: titleKey(name),
         name,
         isGroup: conv ? conv.isGroup : false,
-        messages: accumulated
+        messages: accumulated,
+        currentMessages: currentView ? currentView.messages : []
       });
     } catch (e) {
       sendResponse({ key: "", name: "", messages: [] });

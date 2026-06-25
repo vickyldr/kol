@@ -2394,9 +2394,43 @@ initGuide();
   const refreshBtn = document.getElementById("coop-refresh");
   const grabBtn = document.getElementById("coop-grab");
   const doneBtn = document.getElementById("coop-done");
+  const renderedEl = document.getElementById("coop-rendered");
+  const editBtn = document.getElementById("coop-edit");
+  const clearBtn = document.getElementById("coop-clear");
   if (!coopCard || !coopText) return;
   let currentKey = "";
   let currentName = "";
+
+  // 把进展文本渲染成一眼能扫的清单（✅绿 / ⬜灰 / ⚠️黄）
+  function renderChecklist() {
+    const text = coopText.value.trim();
+    renderedEl.replaceChildren();
+    if (!text) {
+      const s = document.createElement("span");
+      s.className = "coop-empty";
+      s.textContent = "还没有进展，先抓取对话→总结。";
+      renderedEl.appendChild(s);
+      return;
+    }
+    text.split("\n").forEach((raw) => {
+      const line = raw.trim();
+      if (!line) return;
+      const row = document.createElement("div");
+      if (line.startsWith("✅")) { row.className = "cl-row done"; row.textContent = line; }
+      else if (line.startsWith("⬜") || line.startsWith("□")) { row.className = "cl-row todo"; row.textContent = line; }
+      else if (line.startsWith("➖")) { row.className = "cl-row na"; row.textContent = line; }
+      else if (line.startsWith("⚠")) { row.className = "cl-row warn"; row.textContent = line; }
+      else { row.className = "cl-row plain"; row.textContent = line; }
+      renderedEl.appendChild(row);
+    });
+  }
+
+  function setEditing(on) {
+    coopText.classList.toggle("hidden", !on);
+    renderedEl.classList.toggle("hidden", on);
+    editBtn.textContent = on ? "✅ 改好了" : "✏️ 改";
+    if (!on) renderChecklist();
+  }
 
   async function getOpenConversation() {
     try {
@@ -2426,6 +2460,7 @@ initGuide();
     const store = await chrome.storage.local.get("kolSummaries");
     const rec = currentKey ? (store.kolSummaries || {})[currentKey] : null;
     coopText.value = rec ? rec.text : "";
+    renderChecklist();
     coopMeta.textContent = rec
       ? `更新于 ${new Date(rec.updatedAt).toLocaleString()}`
       : (currentName ? currentName : "（先在 IG 打开一个对话）");
@@ -2439,7 +2474,8 @@ initGuide();
     await chrome.storage.local.set({ kolSummaries: all });
   }
 
-  // ① 抓取：把当前对话所有可见消息拉进导入框
+  // ① 抓取"这一屏"：只取当前屏幕可见的消息，逐次追加（重复的自动去掉）
+  // 用法：滚到最上面点一次→往下滚一点再点→一直到底，像截图一样一段段拼起来。
   async function grab() {
     const orig = grabBtn.textContent;
     grabBtn.disabled = true;
@@ -2447,17 +2483,25 @@ initGuide();
     try {
       const conv = await getOpenConversation();
       if (conv && conv.key) { currentKey = conv.key; currentName = conv.name || ""; }
-      const text = messagesToText(conv);
-      if (!text) {
-        errorBox.textContent = "没抓到消息——请在 IG 打开一个对话(可往上滚多看几条)，或直接粘贴。";
+      const view = (conv && conv.currentMessages) || [];
+      if (!view.length) {
+        errorBox.textContent = "这一屏没读到消息——确认在 IG 打开了对话，或直接把对话粘贴进框里。";
         errorBox.classList.remove("hidden");
-      } else {
-        // 追加而不是覆盖：你手动粘的几段 + 抓取的，都留着
-        coopImport.value = coopImport.value.trim()
-          ? coopImport.value.trim() + "\n" + text
-          : text;
-        coopMeta.textContent = `${currentName ? currentName + " · " : ""}已并入 ${conv.messages.length} 条`;
+        return;
       }
+      const newLines = view.map((m) => {
+        const who = m.from === "me" ? "我" : m.from === "colleague" ? (m.name || "同事") : (m.name || "对方");
+        return `${who}: ${m.text}`;
+      });
+      // 去重追加：已在框里的行不再加
+      const existing = new Set(coopImport.value.split("\n").map((s) => s.trim()).filter(Boolean));
+      let added = 0;
+      newLines.forEach((l) => {
+        if (!existing.has(l.trim())) { existing.add(l.trim()); added += 1; }
+      });
+      coopImport.value = Array.from(existing).join("\n");
+      const total = existing.size;
+      coopMeta.textContent = `这屏新增 ${added} 条 · 共 ${total} 条（继续往下滚再点）`;
     } finally {
       grabBtn.disabled = false;
       grabBtn.textContent = orig;
@@ -2491,6 +2535,7 @@ initGuide();
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "总结失败");
       coopText.value = body.summary || coopText.value;
+      renderChecklist();
       await save();
       coopMeta.textContent = "刚刚更新";
     } catch (e) {
@@ -2520,8 +2565,10 @@ initGuide();
 
   coopCard.addEventListener("toggle", () => { if (coopCard.open) loadForOpen(); });
   grabBtn.addEventListener("click", grab);
+  clearBtn.addEventListener("click", () => { coopImport.value = ""; coopMeta.textContent = "已清空"; });
   refreshBtn.addEventListener("click", summarize);
   doneBtn.addEventListener("click", markDone);
+  editBtn.addEventListener("click", () => setEditing(coopText.classList.contains("hidden")));
   let saveTimer;
   coopText.addEventListener("input", () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); });
 })();
