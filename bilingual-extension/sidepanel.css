@@ -251,3 +251,7 @@ dialog::backdrop { background: rgba(20,24,36,.4); }
 .template-fold > summary { cursor: pointer; font-size: 13px; color: #5a6072; padding: 6px 0; }
 .analysis-block { margin-top: 10px; }
 .analysis-block > summary { cursor: pointer; font-weight: 600; color: #5a6072; padding: 6px 0; }
+.reminder-smart { margin-bottom: 6px; }
+.reminder-smart #todo-smart { flex: 1 1 100%; }
+.todo-manual > summary { cursor: pointer; font-size: 12px; color: #8b90a0; padding: 2px 0 6px; }
+.rewrite-card #rewrite-box-pro { width: 100%; box-sizing: border-box; }

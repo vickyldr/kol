@@ -1032,6 +1032,50 @@ async function alignReplyAction() {
 }
 
 // 板块 B 的回译核对：外语→中文。
+// 我主动发：生成后「让 AI 改这条」
+async function rewriteGoPro() {
+  const box = document.getElementById("rewrite-box-pro");
+  const text = box.value.trim();
+  if (!text) { box.focus(); return; }
+  if (!serviceOnline) {
+    errorBox.textContent = "千问服务尚未连接。";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  const target = replyTargetProInput.value.trim();
+  if (!target) { replyTargetProInput.focus(); return; }
+  const button = document.getElementById("rewrite-go-pro");
+  const status = document.getElementById("rewrite-status-pro");
+  const orig = button.textContent;
+  button.disabled = true;
+  button.textContent = "AI 处理中…";
+  status.classList.add("hidden");
+  status.classList.remove("error");
+  try {
+    const body = await postRewrite({
+      direction: "refine",
+      message: "",
+      productId: productSelect.value,
+      detectedLanguage: "",
+      replyTarget: target,
+      replyChinese: replyChineseProInput.value.trim(),
+      modification: text
+    });
+    replyTargetProInput.value = body.reply_target || replyTargetProInput.value;
+    replyChineseProInput.value = body.reply_chinese || replyChineseProInput.value;
+    box.value = "";
+    status.textContent = "已按你的要求改好 ↑";
+    status.classList.remove("hidden", "error");
+  } catch (error) {
+    status.textContent = error.name === "TimeoutError" ? "超时，请重试。" : error.message;
+    status.classList.remove("hidden");
+    status.classList.add("error");
+  } finally {
+    button.disabled = false;
+    button.textContent = orig;
+  }
+}
+
 async function translateProReply() {
   if (!serviceOnline) {
     freeStatus.textContent = "千问服务尚未连接。";
@@ -2050,6 +2094,7 @@ document
   .getElementById("free-faithful")
   .addEventListener("click", () => generateFree("faithful"));
 translateProButton.addEventListener("click", translateProReply);
+document.getElementById("rewrite-go-pro").addEventListener("click", rewriteGoPro);
 document
   .getElementById("open-playbook-reactive")
   .addEventListener("click", () => openPlaybookPicker("reactive"));
@@ -2502,6 +2547,44 @@ initGuide();
     await setLocal({ kolTodos: todos });
     document.getElementById("todo-text").value = "";
     document.getElementById("todo-due").value = "";
+  });
+
+  // 智能加待办：打一句话，AI 解析出事项 + 时间
+  document.getElementById("add-todo-smart").addEventListener("click", async () => {
+    const input = document.getElementById("todo-smart");
+    const sentence = input.value.trim();
+    if (!sentence) { input.focus(); return; }
+    const btn = document.getElementById("add-todo-smart");
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "解析中…";
+    try {
+      const res = await fetch(`${API_BASE}/api/parse-todo`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ sentence, now: new Date().toISOString() }),
+        signal: AbortSignal.timeout(20000)
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "解析失败");
+      // 用解析出的本地日期时间拼 dueAt
+      let dueAt = nowIso();
+      if (body.date) {
+        const d = new Date(`${body.date}T${(body.time || "10:00")}:00`);
+        if (!isNaN(d)) dueAt = d.toISOString();
+      }
+      const store = await getLocal("kolTodos");
+      const todos = store.kolTodos || [];
+      todos.push({ id: "t" + Date.now(), text: body.text || sentence, dueAt, done: false, dismissed: false });
+      await setLocal({ kolTodos: todos });
+      input.value = "";
+      btn.textContent = "已加 ✓";
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    } catch (e) {
+      btn.textContent = "解析失败,改手动";
+      setTimeout(() => { btn.textContent = orig; }, 1800);
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // —— 开关面板 ——

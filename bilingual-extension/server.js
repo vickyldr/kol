@@ -448,6 +448,26 @@ ${REPLY_STYLE}`;
   );
 }
 
+// 把运营随口一句话解析成「事项 + 到点时间」。当前时间由客户端传入。
+async function parseTodo(payload) {
+  const now = String(payload.now || "");
+  const result = await callQwen({
+    system: `你把运营随手写的一句待办，解析成"事项 + 具体到点时间"。
+当前时间是：${now}（ISO 8601，含时区）。据此把"5天后""明天下午3点""周五""下周一"等相对说法换算成具体日期。
+没明说时间就默认当天 10:00。事项里去掉时间词，只留要做的事。
+只返回 JSON：{"text":"事项","date":"YYYY-MM-DD","time":"HH:MM"}。`,
+    user: JSON.stringify({ sentence: payload.sentence || "" }),
+    maxTokens: 200,
+    temperature: 0,
+    model: MODEL_FAST
+  });
+  return {
+    text: String(result.text || payload.sentence || "").trim(),
+    date: String(result.date || "").trim(),
+    time: String(result.time || "10:00").trim()
+  };
+}
+
 // 快出回复：只生成「外语回复 + 中文对照」，不做完整分析，追求 3-5 秒先出。
 async function quickReply(payload) {
   const product = findProduct(payload.productId);
@@ -1097,6 +1117,14 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "单条消息过长。" });
       }
       return json(res, 200, await translateFaithfully(text));
+    }
+
+    if (req.method === "POST" && req.url === "/api/parse-todo") {
+      const payload = await readBody(req);
+      if (!String(payload.sentence || "").trim()) {
+        return json(res, 400, { error: "请输入一句话。" });
+      }
+      return json(res, 200, await parseTodo(payload));
     }
 
     if (req.method === "POST" && req.url === "/api/reply") {

@@ -74,11 +74,18 @@
           <p id="reminder-settings-status" class="template-status hidden"></p>
         </details>
 
-        <div class="reminder-add">
-          <input id="todo-text" type="text" placeholder="加个待办，例如：周五给 @Anna 发新品" />
-          <input id="todo-due" type="datetime-local" />
-          <button id="add-todo" type="button" class="secondary">＋ 加待办</button>
+        <div class="reminder-add reminder-smart">
+          <input id="todo-smart" type="text" placeholder="打一句话，AI 帮你定时间：5天后小树枝交稿 / 明天下午3点催 @Anna" />
+          <button id="add-todo-smart" type="button" class="primary">🪄 智能加</button>
         </div>
+        <details class="todo-manual">
+          <summary>或手动填</summary>
+          <div class="reminder-add">
+            <input id="todo-text" type="text" placeholder="事项，例如：给 @Anna 发新品" />
+            <input id="todo-due" type="datetime-local" />
+            <button id="add-todo" type="button" class="secondary">＋ 加待办</button>
+          </div>
+        </details>
 
         <div id="reminder-list" class="reminder-list">
           <p class="reminder-empty">暂无提醒。打开 IG 私信刷一刷，这里会自动出现「待回复 / 待跟进」。</p>
@@ -310,6 +317,13 @@
               <button data-copy-value="reply-zh-pro">复制</button>
             </div>
             <textarea id="reply-zh-pro" class="reply-editor" rows="6" placeholder="中文对照"></textarea>
+          </article>
+
+          <article class="card rewrite-card">
+            <span class="card-label">想改？告诉 AI 怎么改</span>
+            <textarea id="rewrite-box-pro" rows="2" placeholder="例如：太长了精简一点 / 语气更热情 / 换个说法 / 别提价格"></textarea>
+            <button id="rewrite-go-pro" class="editor-tool primary">让 AI 改这条</button>
+            <p id="rewrite-status-pro" class="refine-status hidden"></p>
           </article>
 
           <article id="missing-card-pro" class="card hidden">
