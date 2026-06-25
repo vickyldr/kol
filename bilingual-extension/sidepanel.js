@@ -2590,7 +2590,7 @@ statusButton.addEventListener("click", checkService);
 
 // ===== 本地记录备份 / 恢复（合作进度·提醒·待办·身份设置） =====
 const BACKUP_KEYS = [
-  "kolSummaries", "kolThreads", "kolTodos",
+  "kolSummaries", "kolThreads", "kolTodos", "kolQuickReplies",
   "kolReminderSettings", "kolProactiveLang", "kolThreadsSchema"
 ];
 function showBackupStatus(msg, ok) {
@@ -2640,6 +2640,13 @@ document.getElementById("backup-file").addEventListener("change", async (event) 
     ["kolSummaries", "kolThreads", "kolTodos"].forEach((k) => {
       merged[k] = { ...(cur[k] || {}), ...(inc[k] || {}) };
     });
+    // 快捷回复是数组：按 id 合并去重（已有的保留）
+    if (Array.isArray(inc.kolQuickReplies)) {
+      const seen = new Set((cur.kolQuickReplies || []).map((q) => q.id));
+      merged.kolQuickReplies = (cur.kolQuickReplies || []).concat(
+        inc.kolQuickReplies.filter((q) => q && !seen.has(q.id))
+      );
+    }
     ["kolReminderSettings", "kolProactiveLang", "kolThreadsSchema"].forEach((k) => {
       if (inc[k] !== undefined) merged[k] = inc[k];
     });
@@ -3258,5 +3265,157 @@ initGuide();
     if (area === "local" && (changes.kolThreads || changes.kolTodos) && !panel.classList.contains("hidden")) {
       render();
     }
+  });
+})();
+
+// ===================== ⚡ 我的快捷回复（个人·本地·打字秒出）=====================
+// 存在浏览器本地 kolQuickReplies，每条 {id, trigger, target, chinese, createdAt}。
+// 纯本地关键词匹配，不走 AI、不走服务器：准、即时、离线可用。
+(function () {
+  const card = document.getElementById("quickreply-card");
+  const search = document.getElementById("qr-search");
+  const results = document.getElementById("qr-results");
+  const addBox = document.getElementById("qr-add");
+  const triggerIn = document.getElementById("qr-trigger");
+  const targetIn = document.getElementById("qr-target");
+  const zhIn = document.getElementById("qr-zh");
+  const addSave = document.getElementById("qr-add-save");
+  const addStatus = document.getElementById("qr-add-status");
+  const saveAsQuick = document.getElementById("save-as-quick");
+  if (!card || !search || !results) return;
+
+  async function getQR() {
+    const s = await chrome.storage.local.get("kolQuickReplies");
+    return Array.isArray(s.kolQuickReplies) ? s.kolQuickReplies : [];
+  }
+  async function setQR(list) {
+    await chrome.storage.local.set({ kolQuickReplies: list });
+  }
+  function newId() {
+    return "qr_" + Math.random().toString(36).slice(2, 9) + (performance.now() | 0);
+  }
+
+  function fillReply(item) {
+    const rt = document.getElementById("reply-target");
+    const rz = document.getElementById("reply-zh");
+    if (rt) rt.value = item.target || "";
+    if (rz) rz.value = item.chinese || "";
+    const empty = document.getElementById("empty-state");
+    const result = document.getElementById("result");
+    if (empty) empty.classList.add("hidden");
+    if (result) result.classList.remove("hidden");
+    const aa = document.getElementById("ask-answer");
+    if (aa) aa.classList.add("hidden");
+    renderBilingualSplit(item.target || "", item.chinese || "");
+  }
+
+  function renderResults(list, query) {
+    results.replaceChildren();
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "qr-empty";
+      p.textContent = query
+        ? "没搜到。换个词，或在下面「＋ 手动加一条」存一条。"
+        : "还没有快捷回复。生成回复后点「⭐ 存为快捷」，或在下面手动加。";
+      results.appendChild(p);
+      return;
+    }
+    list.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "qr-item";
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "qr-pick";
+      const trg = document.createElement("span");
+      trg.className = "qr-trigger";
+      trg.textContent = item.trigger || "（无触发词）";
+      const prev = document.createElement("span");
+      prev.className = "qr-preview";
+      prev.textContent = item.target || item.chinese || "";
+      main.append(trg, prev);
+      main.addEventListener("click", () => { fillReply(item); card.removeAttribute("open"); });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "qr-del";
+      del.title = "删除这条快捷";
+      del.textContent = "🗑";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const next = (await getQR()).filter((q) => q.id !== item.id);
+        await setQR(next);
+        doSearch();
+      });
+      row.append(main, del);
+      results.appendChild(row);
+    });
+  }
+
+  async function doSearch() {
+    const q = search.value.trim().toLowerCase();
+    const all = await getQR();
+    let list;
+    if (!q) {
+      list = all.slice(-8).reverse(); // 没输入时显示最近 8 条
+    } else {
+      list = all.filter((it) =>
+        [it.trigger, it.target, it.chinese].some(
+          (f) => String(f || "").toLowerCase().includes(q)
+        )
+      );
+    }
+    renderResults(list, q);
+  }
+
+  async function addQuick({ trigger, target, chinese }) {
+    if (!target && !chinese) return false;
+    const list = await getQR();
+    list.push({
+      id: newId(),
+      trigger: (trigger || "").trim(),
+      target: (target || "").trim(),
+      chinese: (chinese || "").trim(),
+      createdAt: new Date().toISOString()
+    });
+    await setQR(list);
+    return true;
+  }
+
+  search.addEventListener("input", doSearch);
+  card.addEventListener("toggle", () => { if (card.open) doSearch(); });
+
+  addSave && addSave.addEventListener("click", async () => {
+    const ok = await addQuick({
+      trigger: triggerIn.value,
+      target: targetIn.value,
+      chinese: zhIn.value
+    });
+    if (!ok) {
+      addStatus.textContent = "至少填外语或中文其中一个。";
+      addStatus.classList.remove("hidden");
+      return;
+    }
+    triggerIn.value = ""; targetIn.value = ""; zhIn.value = "";
+    addStatus.textContent = "已存进我的快捷。";
+    addStatus.classList.remove("hidden");
+    addBox.removeAttribute("open");
+    setTimeout(() => addStatus.classList.add("hidden"), 2500);
+    doSearch();
+  });
+
+  // 「⭐ 存为快捷」：把当前双语回复带进手动添加框，焦点落到触发词，填个词就存
+  saveAsQuick && saveAsQuick.addEventListener("click", () => {
+    const rt = document.getElementById("reply-target");
+    const rz = document.getElementById("reply-zh");
+    if (!rt || !rt.value.trim()) {
+      const eb = document.getElementById("request-error");
+      if (eb) { eb.textContent = "先生成一条回复再存为快捷。"; eb.classList.remove("hidden"); }
+      return;
+    }
+    card.setAttribute("open", "");
+    addBox.setAttribute("open", "");
+    targetIn.value = rt.value.trim();
+    zhIn.value = rz ? rz.value.trim() : "";
+    triggerIn.focus();
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
 })();

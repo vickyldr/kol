@@ -143,6 +143,20 @@
           <textarea id="coop-text" class="hidden" rows="9" placeholder="一行一条，开头用 ✅ 或 ⬜；改完点上面「✏️ 改」收起。"></textarea>
         </details>
 
+        <details class="quickreply-card" id="quickreply-card">
+          <summary>⚡ 我的快捷回复（打字秒出）</summary>
+          <input id="qr-search" type="text" autocomplete="off" placeholder="打几个字搜你存的快捷（触发词或内容）→ 点一下填进回复" />
+          <div id="qr-results" class="qr-results"></div>
+          <details class="qr-add" id="qr-add">
+            <summary>＋ 手动加一条快捷</summary>
+            <input id="qr-trigger" type="text" placeholder="触发词，例如：报价 / 免费 / brief（打这几个字就能搜到）" />
+            <textarea id="qr-target" rows="2" placeholder="外语回复"></textarea>
+            <textarea id="qr-zh" rows="2" placeholder="中文对照（可留空）"></textarea>
+            <button id="qr-add-save" class="secondary" type="button">保存到我的快捷</button>
+            <p id="qr-add-status" class="template-status hidden"></p>
+          </details>
+        </details>
+
         <section class="input-card">
           <label for="message">红人发来的原文（外语 · 看不懂就贴这）</label>
           <textarea id="message" rows="3" placeholder="把红人的外语消息粘进来 → 点「这是什么意思」翻成中文。&#10;只想翻译、不回复的话，填这一个就够了。"></textarea>
@@ -183,6 +197,7 @@
             <div class="card-heading">
               <span class="card-label">双语回复</span>
               <div class="heading-buttons">
+                <button id="save-as-quick" class="secondary" type="button">⭐ 存为快捷</button>
                 <button class="save-trigger secondary" type="button">保存为话术</button>
                 <button data-copy-value="reply-target">复制全部外语</button>
               </div>

@@ -295,3 +295,23 @@ dialog::backdrop { background: rgba(20,24,36,.4); }
 .cl-row.warn { background: #fff7e6; border-left-color: #e0a020; color: #8a5a00; font-weight: 600; }
 .cl-row.plain { color: #384056; }
 .coop-edit-btn { float: right; border: 1px solid #d8cdf0; background: #f3edff; color: #5a4a8a; border-radius: 999px; padding: 2px 10px; font-size: 11px; cursor: pointer; font-weight: 400; }
+
+/* ⚡ 我的快捷回复 */
+.quickreply-card { margin: 10px 0; border: 1px solid #ffe2a8; border-radius: 14px; background: #fffdf6; padding: 0; }
+.quickreply-card > summary { cursor: pointer; padding: 11px 14px; font-size: 13px; font-weight: 700; color: #9a6a00; list-style: none; }
+.quickreply-card > summary::-webkit-details-marker { display: none; }
+.quickreply-card[open] > summary { border-bottom: 1px solid #ffe2a8; }
+#qr-search { width: 100%; margin: 10px 0 6px; padding: 9px 11px; border: 1px solid #e6d9b8; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
+.quickreply-card > input, .quickreply-card .qr-results, .quickreply-card .qr-add { margin-left: 12px; margin-right: 12px; }
+.qr-results { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+.qr-empty { margin: 4px 2px 8px; font-size: 12px; color: #9aa0ad; }
+.qr-item { display: grid; grid-template-columns: 1fr auto; gap: 4px; align-items: stretch; }
+.qr-pick { text-align: left; display: grid; gap: 2px; padding: 8px 10px; border: 1px solid #eee2c4; border-radius: 9px; background: #fff; cursor: pointer; }
+.qr-pick:hover { background: #fff6df; border-color: #f3d896; }
+.qr-trigger { font-size: 13px; font-weight: 700; color: #6b4e00; }
+.qr-preview { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qr-del { border: none; background: transparent; cursor: pointer; font-size: 14px; padding: 0 6px; border-radius: 8px; color: #b0455a; }
+.qr-del:hover { background: #ffe6ec; }
+.qr-add { margin-bottom: 12px; }
+.qr-add > summary { cursor: pointer; font-size: 12px; color: #9a6a00; padding: 4px 0; }
+.qr-add input, .qr-add textarea { width: 100%; margin: 5px 0; padding: 8px 10px; border: 1px solid #e6d9b8; border-radius: 9px; font-size: 13px; box-sizing: border-box; }
