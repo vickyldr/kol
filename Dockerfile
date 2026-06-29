@@ -14,5 +14,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Railway 会注入 $PORT；用 shell form 让它展开
+# Claude Code 不允许 root + --dangerously-skip-permissions：改用非 root 用户跑
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser
+ENV HOME=/home/appuser
+
 CMD ["python", "web/run.py"]
