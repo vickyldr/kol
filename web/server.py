@@ -36,9 +36,9 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
+from kol_audit.backend import extract_approval, extract_contract
 from kol_audit.batch import run_batch
 from kol_audit.dedup import DedupStore
-from kol_audit.extract import extract_approval, extract_contract
 from kol_audit.rules import Status
 
 app = FastAPI(title="KOL 付款审批自动核对")

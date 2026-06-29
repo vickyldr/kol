@@ -1,56 +1,55 @@
-# 部署到 Railway，自己用（一次拖一堆文件核对）
+# 部署到 Railway，自己用（用你的 Claude Code token，不额外花钱）
 
-只要 3 样东西就能跑起来，全是你能搞定的：
-1. 这个代码（已配好 Railway 部署文件）；
-2. 一个 Railway 账号（你有）；
-3. **一个读 PDF 的 AI API key**（唯一要你准备的，见下）。
+识别后端走**路 A**：复用你的 Claude Code 订阅 token，**不用开 Anthropic API key、不额外花钱**。
+
+只要 3 步。
 
 ---
 
-## 第 1 步：准备 AI API key（唯一前置）
+## 第 1 步：生成 Claude Code token
 
-网页读 PDF 那步需要一个 AI 接口。**用你自己的个人 key 即可**（不是公司的），很便宜，
-一份文件大概几分钱。默认用 Anthropic Claude：
+在你本地装了 Claude Code 的电脑上跑：
 
-1. 去 https://console.anthropic.com → 注册 → 充值（充 5 美元够用很久）；
-2. 建一个 API Key，复制好（`sk-ant-...`）。
+```bash
+claude setup-token
+```
 
-> 不想用 Anthropic 也行（Google Gemini 有免费额度、OpenAI 也可），告诉我，我改一下识别那段代码。
+会输出一个长 token（`sk-ant-oat...` 之类），复制好。这就是服务器上认证用的。
 
 ## 第 2 步：部署到 Railway
 
 1. 把这份代码推到你自己的 GitHub 仓库；
 2. Railway → New Project → Deploy from GitHub repo → 选这个仓库；
-3. Railway 会自动认出是 Python 项目并构建（已带 `Procfile` / `railway.json`）。
+3. 构建配置已带好（`nixpacks.toml` 会自动装 **Python + Node + Claude Code CLI**），
+   Railway 会自己装好，不用你管。
 
 ## 第 3 步：设环境变量（Railway → Variables）
 
 | 变量名 | 值 | 作用 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | 你的 `sk-ant-...` | 读 PDF 的 AI |
+| `CLAUDE_CODE_OAUTH_TOKEN` | 第 1 步生成的 token | 识别 PDF（用你的订阅）|
 | `ACCESS_USER` | 自己起个用户名 | 登录用户名 |
 | `ACCESS_PASSWORD` | 自己起个密码 | **登录密码（财务数据，必设！）** |
 
-> 设了 `ACCESS_PASSWORD`，网页就需要账号密码才能进，不会被别人乱用。
-> 不设密码也能跑，但**公网千万别不设密码**。
+> 不用设 `ANTHROPIC_API_KEY`。代码会自动判断：有 `CLAUDE_CODE_OAUTH_TOKEN`、
+> 没 API key → 自动走 Claude Code。
+> （想强制指定也行：设 `KOL_BACKEND=claude_code`。）
 
-## 第 4 步：用
+## 用
 
-1. Railway 部署完会给你一个网址（`xxx.up.railway.app`）；
-2. 打开 → 输你设的账号密码 → 把当天所有 PDF 一次拖进去 → 点核对 → 出总表。
+1. Railway 部署完给你一个网址（`xxx.up.railway.app`）；
+2. 打开 → 输你设的账号密码 → 把当天所有 PDF 一次拖进去 → 出总表。
 
 ---
 
-## 关于数据
+## 路 B 备选（不想用 Claude Code token 时）
 
-- 文件里的内容（含银行账号等）会发到你设的那个 AI 接口（Anthropic）去识别——
-  这跟你现在把文件发给我核对是一回事，是**你个人在用**。
-- 比对算账全在你自己的 Railway 服务器上，不外发。
-- 如果将来要给**公司**用、财务要求"数据不出内网"，那就把识别后端换成公司内部 OCR/
-  私有模型（见《数据安全与财务敏感性评估.md》）——那是公司版的事，你自己用不用管。
+改用 Anthropic API key：设 `ANTHROPIC_API_KEY=sk-ant-...`（去 console.anthropic.com 开，
+按量付费、月几美元）。代码自动切到 API 后端，最稳最快。两套后端随时用环境变量切。
 
 ## 跑不起来时
 
-- 构建失败：确认 `requirements.txt` 在仓库根目录；
-- 打开网页 500：多半是 `ANTHROPIC_API_KEY` 没设或余额为 0；
-- 进不去要密码：那是正常的，输你设的 `ACCESS_USER` / `ACCESS_PASSWORD`。
+- 构建失败：确认 `requirements.txt`、`nixpacks.toml` 在仓库根目录；
+- 打开网页 500 / 识别报错：多半是 `CLAUDE_CODE_OAUTH_TOKEN` 没设或过期，重新 `claude setup-token`；
+- 识别慢：Claude Code 是跑一个 agent，比单次 API 略慢属正常；想更快可改走路 B（API）。
+- 要密码：正常，输你设的 `ACCESS_USER` / `ACCESS_PASSWORD`。
