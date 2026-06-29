@@ -462,6 +462,35 @@ def check_video_duplicates(a: Approval) -> CheckResult:
 # ---- 总入口 ---------------------------------------------------------------
 
 
+# ---- 强制完整性闸门 -----------------------------------------------------
+# 每次核对【必须】覆盖这些规则代码。漏任何一条 → 直接抛错、出不来结果，
+# 杜绝「凭感觉、漏查」。预付款单把 6/7/8/8b 合并成一条 "6-8"。
+_REQUIRED_BASE = ["1", "2", "2b", "3", "4", "4b", "5", "11", "12", "13"]
+_REQUIRED_VIDEO = ["6", "7", "8", "8b"]
+
+
+def _code_of(name: str) -> str:
+    # "4b. xxx" -> "4b"； "6-8. xxx" -> "6-8"
+    return name.split(".", 1)[0].strip()
+
+
+def assert_complete(checks: List[CheckResult], is_prepayment: bool) -> None:
+    """断言所有必查规则都跑到了；缺一条就抛错（调用方拿不到结果）。"""
+    have = {_code_of(c.name) for c in checks}
+    required = set(_REQUIRED_BASE)
+    if is_prepayment:
+        required.add("6-8")
+    else:
+        required.update(_REQUIRED_VIDEO)
+        required.add("6")
+    missing = sorted(required - have)
+    if missing:
+        raise RuntimeError(
+            f"核对未完成：规则 {missing} 没有执行，拒绝输出结果。"
+            "（这是强制闸门，防止漏查）"
+        )
+
+
 def audit(a: Approval, c: Contract) -> AuditResult:
     """跑完所有检查，汇总成一个结论。"""
     checks: List[CheckResult] = [
@@ -507,5 +536,19 @@ def audit(a: Approval, c: Contract) -> AuditResult:
     if yt.status is Status.FLAG:
         flags.append(yt)
 
+    # 强制闸门：所有必查规则没全跑到，就抛错、出不来结果
+    assert_complete(checks, a.is_prepayment)
+
     overall = Status.FAIL if any(ch.status is Status.FAIL for ch in checks) else Status.PASS
     return AuditResult(overall=overall, checks=checks, flags=flags)
+
+
+def render_checklist(a: Approval, result: AuditResult) -> str:
+    """把一单的【全部】规则逐条列出来（PASS/FAIL/FLAG），让人能核我有没有漏查。"""
+    icon = {Status.PASS: "✅", Status.FAIL: "❌", Status.FLAG: "⚠️"}
+    lines = [f"{a.approval_id}  {a.project}/{a.kol_nickname}  →  整体：{result.overall.value}"]
+    for ch in result.checks:
+        lines.append(f"  {icon[ch.status]} {ch.name}：{ch.detail}")
+    for fl in result.flags:
+        lines.append(f"  {icon[fl.status]} {fl.name}：{fl.detail}")
+    return "\n".join(lines)

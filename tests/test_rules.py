@@ -291,6 +291,21 @@ def test_youtube_among_multi_platforms_not_flagged():
     assert not any(f.name.startswith("10c") for f in res.flags)
 
 
+def test_audit_runs_all_required_rules():
+    # 强制闸门：正常单子必须覆盖全部必查规则
+    res = audit(make_approval(), make_contract())
+    codes = {c.name.split(".", 1)[0] for c in res.checks}
+    for need in ["1", "2", "2b", "3", "4", "4b", "5", "6", "7", "8", "8b", "11", "12", "13"]:
+        assert need in codes, f"漏了规则 {need}"
+
+
+def test_assert_complete_raises_when_a_rule_is_missing():
+    from kol_audit.rules import assert_complete, CheckResult, Status as S
+    incomplete = [CheckResult("1. 项目一致", S.PASS, "")]  # 故意只给一条
+    with pytest.raises(RuntimeError):
+        assert_complete(incomplete, is_prepayment=False)
+
+
 def test_dedup(tmp_path):
     store = DedupStore(str(tmp_path / "store.json"))
     a = make_approval()
