@@ -31,18 +31,34 @@ def _norm(s: Optional[str]) -> str:
     return (s or "").strip().casefold()
 
 
-def match_contract(a: Approval, contracts: List[Contract]) -> Optional[Contract]:
-    """给一份审批找它对应的合同。
+def match_contract(a: Approval, contracts: List[Contract]) -> Tuple[Optional[Contract], str]:
+    """给一份审批找它对应的合同，返回 (合同, 配对说明)。
 
-    先按 KOL 昵称配，配不上再按收款账户名配。都配不上返回 None。
+    关键防呆：同一个 KOL 可能有多份合同（比如一份 VivaVideo、一份 Recco）。
+    绝不"随便挑一份配上就算"——
+      - 唯一候选：直接用。
+      - 多份候选：按项目（合同 WHEREAS App 名）挑和审批项目一致的那份；
+        若挑不出唯一的 → 仍返回一份，但带「配对不唯一，请人工确认」说明，强制人工核。
+    都配不上返回 (None, 原因)。
     """
-    for c in contracts:
-        if _norm(a.kol_nickname) and _norm(a.kol_nickname) == _norm(c.kol_nickname):
-            return c
-    for c in contracts:
-        if _norm(a.account_name) and _norm(a.account_name) == _norm(c.account_name):
-            return c
-    return None
+    kol = [c for c in contracts if _norm(a.kol_nickname) and _norm(a.kol_nickname) == _norm(c.kol_nickname)]
+    cands = kol or [
+        c for c in contracts if _norm(a.account_name) and _norm(a.account_name) == _norm(c.account_name)
+    ]
+    if not cands:
+        return None, "找不到对应合同，无法核对"
+    if len(cands) == 1:
+        return cands[0], ""
+
+    # 多份候选 → 按项目配
+    proj = [c for c in cands if _norm(a.project) and _norm(a.project) == _norm(c.project)]
+    if len(proj) == 1:
+        return proj[0], f"该 KOL 有 {len(cands)} 份合同，已按项目「{a.project}」配对，请人工确认配对无误"
+    chosen = proj[0] if proj else cands[0]
+    return chosen, (
+        f"⚠️ 该 KOL 有 {len(cands)} 份合同、按项目也定不出唯一一份，"
+        f"配对不确定，务必人工确认配的是哪份合同"
+    )
 
 
 @dataclass
@@ -53,6 +69,7 @@ class BatchItem:
     result: Optional[AuditResult]
     overall: Status            # 这一单的最终结论
     note: str = ""             # 异常说明（如找不到合同）
+    match_note: str = ""       # 配对说明（如该 KOL 有多份合同，配对不唯一）
 
 
 def run_batch(
@@ -65,12 +82,12 @@ def run_batch(
     seen_at = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
 
     for a in approvals:
-        c = match_contract(a, contracts)
+        c, match_note = match_contract(a, contracts)
         dup = store.check(a) if store else None
 
         if c is None:
             items.append(
-                BatchItem(a, None, dup, None, Status.FAIL, note="找不到对应合同，无法核对")
+                BatchItem(a, None, dup, None, Status.FAIL, note=match_note or "找不到对应合同，无法核对")
             )
             continue
 
@@ -79,7 +96,7 @@ def run_batch(
         if dup and dup.is_duplicate:
             overall = Status.FAIL  # 重复提交也算打回
 
-        items.append(BatchItem(a, c, dup, result, overall))
+        items.append(BatchItem(a, c, dup, result, overall, match_note=match_note))
 
         if store and record and not (dup and dup.is_duplicate):
             store.record(a, seen_at)
@@ -107,6 +124,8 @@ def render_batch(items: List[BatchItem]) -> str:
         who = f"{it.approval.project}/{it.approval.kol_nickname}"
         head = f"{icon} {it.approval.approval_id}  {who}"
         lines.append(head)
+        if it.match_note:
+            lines.append(f"     ⚠️ 配对：{it.match_note}")
         if it.overall is Status.FAIL:
             reasons = []
             if it.dup and it.dup.is_duplicate:

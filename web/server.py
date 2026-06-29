@@ -126,6 +126,8 @@ def _render_html(items, errors) -> str:
                     detail.append(f"{ch.name}：{ch.detail}")
         if it.dup and it.dup.is_duplicate:
             detail.insert(0, "重复提交")
+        if it.match_note:
+            detail.insert(0, it.match_note)
         if it.note:
             detail.insert(0, it.note)
         proj = f"{it.approval.project} / {it.approval.kol_nickname}"
