@@ -21,7 +21,6 @@
 
 from __future__ import annotations
 
-import io
 import sys
 from pathlib import Path
 
@@ -31,7 +30,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import io
 import os
 import secrets
+import tempfile
+import threading
+import uuid
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import fitz  # PyMuPDF：仅用于本地判断"审批 or 合同"，不外发
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
@@ -44,6 +47,12 @@ from kol_audit.dedup import DedupStore
 from kol_audit.rules import Status
 
 app = FastAPI(title="KOL 付款审批自动核对")
+
+# 后台任务表：一次上传 = 一个 job，后台慢慢跑，页面轮询进度，避免 HTTP 超时。
+_JOBS: dict[str, dict] = {}
+_JOBS_LOCK = threading.Lock()
+# 并发提取：多少个文件同时读（路 A 每个起一个 claude agent，别开太大以免 OOM）
+_CONCURRENCY = int(os.environ.get("KOL_CONCURRENCY", "3"))
 
 _INDEX = Path(__file__).resolve().parent / "index.html"
 
@@ -97,38 +106,90 @@ def _expand(name: str, data: bytes):
         yield name, data
 
 
+def _as_pdf(data: bytes, name: str) -> Path:
+    """extract.py 接收路径；把上传内容落到临时文件再传入（用 uuid 防重名冲突）。"""
+    p = Path(tempfile.gettempdir()) / f"_kol_{uuid.uuid4().hex}.pdf"
+    p.write_bytes(data)
+    return p
+
+
+def _extract_one(name: str, data: bytes):
+    """读一个 PDF，返回 (类型, 结果或错误, 文件名)。"""
+    try:
+        if _is_approval(data):
+            return ("a", extract_approval(_as_pdf(data, name)), name)
+        return ("c", extract_contract(_as_pdf(data, name)), name)
+    except Exception as e:  # 失败也要显式记下来，绝不静默跳过
+        return ("e", str(e), name)
+
+
+def _run_job(job_id: str, pdfs: list[tuple[str, bytes]], pre_errors: list[str]) -> None:
+    """后台线程：并发提取所有 PDF → 配对 → 跑核对 → 存结果。"""
+    approvals, contracts, errors = [], [], list(pre_errors)
+    try:
+        with ThreadPoolExecutor(max_workers=_CONCURRENCY) as ex:
+            futs = [ex.submit(_extract_one, name, data) for name, data in pdfs]
+            for fut in as_completed(futs):
+                kind, val, name = fut.result()
+                if kind == "a":
+                    approvals.append(val)
+                elif kind == "c":
+                    contracts.append(val)
+                else:
+                    errors.append(f"{name}: 读取失败 {val}")
+                with _JOBS_LOCK:
+                    _JOBS[job_id]["done"] += 1
+        store = DedupStore("processed_approvals.json")
+        items = run_batch(approvals, contracts, store, record=False)
+        html = _render_html(items, errors)
+        with _JOBS_LOCK:
+            _JOBS[job_id].update(status="done", html=html)
+    except Exception as e:
+        with _JOBS_LOCK:
+            _JOBS[job_id].update(status="error", html=f"<p>处理出错：{e}</p>")
+
+
 @app.post("/audit", response_class=HTMLResponse)
 async def audit_files(files: list[UploadFile], _: None = Depends(require_login)) -> str:
-    approvals, contracts, errors = [], [], []
-    # 先把 zip 解开，汇成一堆 PDF
+    # 先把上传内容读出来 + zip 解开（必须在请求里读完）
     pdfs: list[tuple[str, bytes]] = []
+    pre_errors: list[str] = []
     for f in files:
         raw = await f.read()
         try:
             pdfs.extend(_expand(f.filename, raw))
         except Exception as e:
-            errors.append(f"{f.filename}: 解压/读取失败 {e}")
-    for name, data in pdfs:
-        try:
-            if _is_approval(data):
-                approvals.append(extract_approval(_as_pdf(data, name)))
-            else:
-                contracts.append(extract_contract(_as_pdf(data, name)))
-        except Exception as e:  # 提取失败也要显式报出来，绝不静默跳过
-            errors.append(f"{name}: 读取失败 {e}")
+            pre_errors.append(f"{f.filename}: 解压/读取失败 {e}")
 
-    store = DedupStore("processed_approvals.json")
-    items = run_batch(approvals, contracts, store, record=False)
-    return _render_html(items, errors)
+    job_id = uuid.uuid4().hex[:12]
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {"status": "running", "total": len(pdfs), "done": 0, "html": None}
+    threading.Thread(target=_run_job, args=(job_id, pdfs, pre_errors), daemon=True).start()
+    # 立刻返回，跳到进度页（后台慢慢跑，页面自动刷新，绝不卡超时）
+    return (
+        f"<!doctype html><meta charset=utf-8>"
+        f"<meta http-equiv=refresh content='1;url=/job/{job_id}'>"
+        f"<body style='font-family:sans-serif;margin:40px'>已收到 {len(pdfs)} 个文件，开始核对…</body>"
+    )
 
 
-def _as_pdf(data: bytes, name: str) -> Path:
-    """extract.py 接收路径；把上传内容落到临时文件再传入。"""
-    import tempfile
-
-    p = Path(tempfile.gettempdir()) / f"_kol_{abs(hash(name)) % 10**8}.pdf"
-    p.write_bytes(data)
-    return p
+@app.get("/job/{job_id}", response_class=HTMLResponse)
+def job_page(job_id: str, _: None = Depends(require_login)) -> str:
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+    if not job:
+        return "<meta charset=utf-8><p>任务不存在或已过期，请<a href='/'>重新上传</a>。</p>"
+    if job["status"] == "done" or job["status"] == "error":
+        return job["html"]
+    done, total = job["done"], job["total"]
+    return (
+        f"<!doctype html><meta charset=utf-8>"
+        f"<meta http-equiv=refresh content=3>"  # 每 3 秒自刷新
+        f"<body style='font-family:sans-serif;max-width:700px;margin:40px auto'>"
+        f"<h2>核对中…</h2>"
+        f"<p>已读取 <b>{done} / {total}</b> 个文件，本页每 3 秒自动刷新，读完会自动出总表。</p>"
+        f"<p style='color:#888'>（识别每个文件要点时间，文件多请耐心等；别关页面）</p></body>"
+    )
 
 
 def _render_html(items, errors) -> str:
