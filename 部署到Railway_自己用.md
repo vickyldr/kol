@@ -20,8 +20,8 @@ claude setup-token
 
 1. 把这份代码推到你自己的 GitHub 仓库；
 2. Railway → New Project → Deploy from GitHub repo → 选这个仓库；
-3. 构建配置已带好（`nixpacks.toml` 会自动装 **Python + Node + Claude Code CLI**），
-   Railway 会自己装好，不用你管。
+3. 构建用 `Dockerfile`（已带好，会自动装 **Python + Node + Claude Code CLI**），
+   Railway 自动识别并构建，不用你管（首次构建几分钟）。
 
 ## 第 3 步：设环境变量（Railway → Variables）
 
@@ -49,7 +49,7 @@ claude setup-token
 
 ## 跑不起来时
 
-- 构建失败：确认 `requirements.txt`、`nixpacks.toml` 在仓库根目录；
+- 构建失败：确认 `Dockerfile`、`requirements.txt` 在仓库根目录；
 - 打开网页 500 / 识别报错：多半是 `CLAUDE_CODE_OAUTH_TOKEN` 没设或过期，重新 `claude setup-token`；
 - 识别慢：Claude Code 是跑一个 agent，比单次 API 略慢属正常；想更快可改走路 B（API）。
 - 要密码：正常，输你设的 `ACCESS_USER` / `ACCESS_PASSWORD`。
