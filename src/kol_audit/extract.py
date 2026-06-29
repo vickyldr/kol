@@ -9,13 +9,16 @@
 from __future__ import annotations
 
 import base64
+import os
 from pathlib import Path
 
 import anthropic
 
 from .models import Approval, Contract
 
-MODEL = "claude-opus-4-8"
+# 识别用的模型可用环境变量 KOL_MODEL 覆盖。默认用 Sonnet（性价比高、读银行账号/IBAN 够准）；
+# 想更省钱可设 KOL_MODEL=claude-haiku-4-5；想最准可设 claude-opus-4-8。
+MODEL = os.environ.get("KOL_MODEL", "claude-sonnet-4-6")
 
 _CONTRACT_PROMPT = """这是一份 KOL 合作合同。请从中提取以下字段，原样照抄合同里的内容，不要改写、不要计算：
 - project: 合同 WHEREAS 条款里写的「要推广的 App 名」（如 VivaVideo），
