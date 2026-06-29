@@ -28,9 +28,13 @@ from pathlib import Path
 # 让 web/ 能 import 到 src/kol_audit
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import os
+import secrets
+
 import fitz  # PyMuPDF：仅用于本地判断"审批 or 合同"，不外发
-from fastapi import FastAPI, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from kol_audit.batch import run_batch
 from kol_audit.dedup import DedupStore
@@ -40,6 +44,28 @@ from kol_audit.rules import Status
 app = FastAPI(title="KOL 付款审批自动核对")
 
 _INDEX = Path(__file__).resolve().parent / "index.html"
+
+# ---- 访问密码（财务数据，别裸奔在公网）----
+# 部署时设环境变量 ACCESS_USER / ACCESS_PASSWORD 即开启登录；不设则不拦（仅本地用）。
+_AUTH_USER = os.environ.get("ACCESS_USER", "")
+_AUTH_PW = os.environ.get("ACCESS_PASSWORD", "")
+_basic = HTTPBasic(auto_error=False)
+
+
+def require_login(cred: HTTPBasicCredentials | None = Depends(_basic)) -> None:
+    if not _AUTH_PW:  # 没设密码 = 不拦（本地自用）
+        return
+    ok = (
+        cred is not None
+        and secrets.compare_digest(cred.username, _AUTH_USER)
+        and secrets.compare_digest(cred.password, _AUTH_PW)
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="需要登录",
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
 
 def _is_approval(pdf_bytes: bytes) -> bool:
@@ -53,12 +79,12 @@ def _is_approval(pdf_bytes: bytes) -> bool:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> str:
+def index(_: None = Depends(require_login)) -> str:
     return _INDEX.read_text(encoding="utf-8")
 
 
 @app.post("/audit", response_class=HTMLResponse)
-async def audit_files(files: list[UploadFile]) -> str:
+async def audit_files(files: list[UploadFile], _: None = Depends(require_login)) -> str:
     approvals, contracts, errors = [], [], []
     for f in files:
         data = await f.read()
