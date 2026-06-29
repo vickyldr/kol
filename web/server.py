@@ -28,8 +28,10 @@ from pathlib import Path
 # 让 web/ 能 import 到 src/kol_audit
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import io
 import os
 import secrets
+import zipfile
 
 import fitz  # PyMuPDF：仅用于本地判断"审批 or 合同"，不外发
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
@@ -83,18 +85,37 @@ def index(_: None = Depends(require_login)) -> str:
     return _INDEX.read_text(encoding="utf-8")
 
 
+def _expand(name: str, data: bytes):
+    """把上传项展开成若干 (文件名, PDF字节)。支持直接传 PDF，或传 zip（自动解压里面所有 PDF）。"""
+    is_zip = name.lower().endswith(".zip") or data[:2] == b"PK"
+    if is_zip:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            for m in zf.namelist():
+                if m.lower().endswith(".pdf") and "__MACOSX" not in m:
+                    yield m, zf.read(m)
+    else:
+        yield name, data
+
+
 @app.post("/audit", response_class=HTMLResponse)
 async def audit_files(files: list[UploadFile], _: None = Depends(require_login)) -> str:
     approvals, contracts, errors = [], [], []
+    # 先把 zip 解开，汇成一堆 PDF
+    pdfs: list[tuple[str, bytes]] = []
     for f in files:
-        data = await f.read()
+        raw = await f.read()
+        try:
+            pdfs.extend(_expand(f.filename, raw))
+        except Exception as e:
+            errors.append(f"{f.filename}: 解压/读取失败 {e}")
+    for name, data in pdfs:
         try:
             if _is_approval(data):
-                approvals.append(extract_approval(_as_pdf(data, f.filename)))
+                approvals.append(extract_approval(_as_pdf(data, name)))
             else:
-                contracts.append(extract_contract(_as_pdf(data, f.filename)))
+                contracts.append(extract_contract(_as_pdf(data, name)))
         except Exception as e:  # 提取失败也要显式报出来，绝不静默跳过
-            errors.append(f"{f.filename}: 读取失败 {e}")
+            errors.append(f"{name}: 读取失败 {e}")
 
     store = DedupStore("processed_approvals.json")
     items = run_batch(approvals, contracts, store, record=False)

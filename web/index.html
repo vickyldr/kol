@@ -15,11 +15,11 @@
 </style>
 
 <h2>KOL 付款审批自动核对</h2>
-<p>把当天<b>所有</b>审批单 + 合同的 PDF 一次拖进来（几百个都行），点核对，出一张总表。</p>
+<p>把当天<b>所有</b>审批单 + 合同一次拖进来（几百个都行，或直接拖一个 zip），点核对，出一张总表。</p>
 
 <div id="drop">
-  📂 把文件拖到这里，或点击选择<br><small>支持一次选很多个 PDF</small>
-  <input id="file" type="file" accept="application/pdf" multiple hidden>
+  📂 把文件拖到这里，或点击选择<br><small>支持一次选很多个 PDF，或直接拖一个 .zip 压缩包</small>
+  <input id="file" type="file" accept=".pdf,.zip,application/pdf,application/zip" multiple hidden>
 </div>
 <div id="list"></div>
 <button id="go" disabled>开始核对</button>
