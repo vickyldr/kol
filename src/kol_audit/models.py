@@ -7,10 +7,23 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _num_str(v):
+    """把 '5000TL' / 'USD300' / '35,000円' / '2,500.00' 这种带币种/逗号的值抠出纯数字。
+
+    识别后端偶尔会把币种符号也塞进数字字段，这里统一清洗，避免整条读取失败。
+    """
+    if v is None or isinstance(v, (int, float, Decimal)):
+        return v
+    s = str(v).replace(",", "").replace("，", "")
+    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    return m.group(0) if m else v
 
 
 class Approval(BaseModel):
@@ -66,6 +79,25 @@ class Approval(BaseModel):
     notes_video_count: Optional[int] = Field(default=None, description="备注里写的视频条数")
     notes_platform_count: Optional[int] = Field(default=None, description="备注里写的平台数")
 
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _clean_amount(cls, v):
+        return _num_str(v)
+
+    @field_validator("platform_count", "collab_video_count", mode="before")
+    @classmethod
+    def _clean_required_int(cls, v):
+        v = _num_str(v)
+        return 0 if v in (None, "") else v
+
+    @field_validator(
+        "notes_total", "notes_unit_price", "notes_video_count", "notes_platform_count",
+        mode="before",
+    )
+    @classmethod
+    def _clean_optional_num(cls, v):
+        return None if v in (None, "") else _num_str(v)
+
 
 class Contract(BaseModel):
     """审批里附的合同 PDF 中提取出来的关键字段。"""
@@ -87,6 +119,12 @@ class Contract(BaseModel):
         ),
     )
     unit_price: Decimal = Field(description="合同单价（每条视频的价格）")
+
+    @field_validator("unit_price", mode="before")
+    @classmethod
+    def _clean_unit_price(cls, v):
+        return _num_str(v)
+
     account_name: str = Field(description="合同收款信息中的账户名称")
     payment_method: Optional[str] = Field(
         default=None, description="合同约定的收款方式，例如 PayPal"

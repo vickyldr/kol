@@ -397,3 +397,26 @@ def test_paypal_special_chars_name_matches_contract_ok():
     script = next(c for c in res.checks if c.name.startswith("4b"))
     assert acc.status is Status.PASS          # 姓名与合同一致
     assert script.status is Status.PASS       # PayPal 不套英文-only 规则
+
+
+def test_currency_chinese_vs_iso_code_ok():
+    # 美元 vs USD、新台币 vs TWD、欧元 vs Euro、泰铢 vs thai 都应判一致
+    for ac, cc in [("美元", "USD"), ("新台币", "TWD"), ("欧元", "Euro"),
+                   ("泰铢", "thai"), ("日元", "JPY"), ("韩元", "KRW")]:
+        res = audit(make_approval(currency=ac), make_contract(currency=cc))
+        cur = next(c for c in res.checks if c.name.startswith("5"))
+        assert cur.status is Status.PASS, f"{ac} vs {cc} 应一致"
+
+
+def test_numeric_fields_tolerate_currency_text():
+    from kol_audit.models import Approval, Contract
+    from decimal import Decimal
+    a = Approval(approval_id="X", project="P", kol_nickname="k", account_name="n",
+                 currency="美元", amount="35,000円", platform_count=None,
+                 collab_video_count="3条", video_list=["a", "b", "c"])
+    assert a.amount == Decimal("35000")
+    assert a.platform_count == 0
+    assert a.collab_video_count == 3
+    c = Contract(project="P", kol_nickname="k", party_b_legal_name="n",
+                 unit_price="5000TL", account_name="n", currency="TRY")
+    assert c.unit_price == Decimal("5000")

@@ -214,9 +214,36 @@ def check_bank_name_script(a: Approval, c: Contract) -> CheckResult:
     return CheckResult(name, Status.PASS, "收款人姓名为英文")
 
 
+# 币种中英/各种写法 → 统一 ISO 代码，避免「美元 vs USD」这种假性不一致
+_CURRENCY = {
+    "usd": "USD", "美元": "USD", "美金": "USD", "us dollar": "USD", "dollar": "USD", "$": "USD", "us$": "USD",
+    "twd": "TWD", "新台币": "TWD", "台币": "TWD", "新臺幣": "TWD", "臺幣": "TWD", "nt$": "TWD", "ntd": "TWD",
+    "eur": "EUR", "欧元": "EUR", "歐元": "EUR", "euro": "EUR", "€": "EUR",
+    "thb": "THB", "泰铢": "THB", "泰銖": "THB", "thai": "THB", "baht": "THB",
+    "jpy": "JPY", "日元": "JPY", "日圆": "JPY", "円": "JPY", "yen": "JPY",
+    "krw": "KRW", "韩元": "KRW", "韓元": "KRW", "won": "KRW",
+    "try": "TRY", "土耳其里拉": "TRY", "里拉": "TRY", "lira": "TRY", "tl": "TRY",
+    "turkey lira": "TRY", "turkish lira": "TRY",
+    "cny": "CNY", "人民币": "CNY", "人民币元": "CNY", "人民幣": "CNY", "rmb": "CNY",
+    "gbp": "GBP", "英镑": "GBP", "英鎊": "GBP",
+    "brl": "BRL", "巴西雷亚尔": "BRL", "real": "BRL",
+}
+
+
+def _norm_currency(s: Optional[str]) -> str:
+    n = _norm(s)
+    if n in _CURRENCY:
+        return _CURRENCY[n]
+    # 退一步：按较长的关键词包含匹配（如 "TRY-土耳其里拉"）
+    for k in sorted(_CURRENCY, key=len, reverse=True):
+        if len(k) >= 2 and k in n:
+            return _CURRENCY[k]
+    return n
+
+
 def check_currency(a: Approval, c: Contract) -> CheckResult:
     name = "5. 币种一致"
-    if _norm(a.currency) == _norm(c.currency):
+    if _norm_currency(a.currency) == _norm_currency(c.currency):
         return CheckResult(name, Status.PASS, f"币种「{a.currency}」与合同一致")
     return CheckResult(
         name, Status.FAIL, f"审批币种「{a.currency}」≠ 合同币种「{c.currency}」"
