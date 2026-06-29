@@ -17,6 +17,13 @@
 <h2>KOL 付款审批自动核对</h2>
 <p>把当天<b>所有</b>审批单 + 合同一次拖进来（几百个都行，或直接拖一个 zip），点核对，出一张总表。</p>
 
+<p style="margin:14px 0">
+  批次名：
+  <input id="session" type="text" value="{{SESSION}}" placeholder="如 0629（同名可多次补传、累计核对；留空则新开一批）"
+         style="width:340px;padding:6px 10px;font-size:14px">
+  <br><small style="color:#888">同一个批次名 = 补传的文件和之前的合在一起核对；换个名 = 全新批次。</small>
+</p>
+
 <div id="drop">
   📂 把文件拖到这里，或点击选择<br><small>支持一次选很多个 PDF，或直接拖一个 .zip 压缩包</small>
   <input id="file" type="file" accept=".pdf,.zip,application/pdf,application/zip" multiple hidden>
@@ -47,6 +54,7 @@
   go.onclick = async () => {
     go.disabled = true; go.textContent = '核对中…（读 PDF 需要一点时间）';
     const fd = new FormData();
+    fd.append('session', document.getElementById('session').value);
     files.forEach(f => fd.append('files', f));
     const r = await fetch('/audit', { method: 'POST', body: fd });
     document.open(); document.write(await r.text()); document.close();

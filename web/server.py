@@ -27,9 +27,10 @@ from pathlib import Path
 # 让 web/ 能 import 到 src/kol_audit
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import io
+import hashlib
 import os
 import secrets
+import shutil
 import tempfile
 import threading
 import uuid
@@ -37,13 +38,14 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import fitz  # PyMuPDF：仅用于本地判断"审批 or 合同"，不外发
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from kol_audit.backend import extract_approval, extract_contract
 from kol_audit.batch import run_batch
 from kol_audit.dedup import DedupStore
+from kol_audit.models import Approval, Contract
 from kol_audit.rules import Status
 
 app = FastAPI(title="KOL 付款审批自动核对")
@@ -53,6 +55,46 @@ _JOBS: dict[str, dict] = {}
 _JOBS_LOCK = threading.Lock()
 # 并发提取：多少个文件同时读（路 A 每个起一个 claude agent，别开太大以免 OOM）
 _CONCURRENCY = int(os.environ.get("KOL_CONCURRENCY", "3"))
+
+# 批次（文件夹）：同名批次累计补传；已识别过的文件按内容指纹跳过，不重复识别。
+# 设 KOL_DATA_DIR 指向 Railway 卷可跨重启保留；默认放本地目录（重启会清）。
+_DATA_DIR = Path(os.environ.get("KOL_DATA_DIR", str(Path(__file__).resolve().parent.parent / "data")))
+
+
+def _safe_session(name: str) -> str:
+    s = "".join(ch for ch in (name or "") if ch.isalnum() or ch in "-_").strip()
+    return s or "default"
+
+
+def _sess_dir(name: str) -> Path:
+    d = _DATA_DIR / "sessions" / _safe_session(name)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _seen_hashes(name: str) -> set[str]:
+    f = _sess_dir(name) / "seen.txt"
+    return set(f.read_text().split()) if f.exists() else set()
+
+
+def _mark_seen(name: str, h: str) -> None:
+    with (_sess_dir(name) / "seen.txt").open("a") as f:
+        f.write(h + "\n")
+
+
+def _append_model(name: str, kind: str, model) -> None:
+    with (_sess_dir(name) / f"{kind}.jsonl").open("a", encoding="utf-8") as f:
+        f.write(model.model_dump_json() + "\n")
+
+
+def _load_models(name: str, kind: str, cls):
+    f = _sess_dir(name) / f"{kind}.jsonl"
+    out = []
+    if f.exists():
+        for line in f.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                out.append(cls.model_validate_json(line))
+    return out
 
 _INDEX = Path(__file__).resolve().parent / "index.html"
 
@@ -90,8 +132,9 @@ def _is_approval(pdf_bytes: bytes) -> bool:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(_: None = Depends(require_login)) -> str:
-    return _INDEX.read_text(encoding="utf-8")
+def index(s: str = "", _: None = Depends(require_login)) -> str:
+    # ?s=批次名 时预填，方便「继续往这个批次补传」
+    return _INDEX.read_text(encoding="utf-8").replace("{{SESSION}}", _safe_session(s) if s else "")
 
 
 def _expand(name: str, data: bytes):
@@ -123,25 +166,38 @@ def _extract_one(name: str, data: bytes):
         return ("e", str(e), name)
 
 
-def _run_job(job_id: str, pdfs: list[tuple[str, bytes]], pre_errors: list[str]) -> None:
-    """后台线程：并发提取所有 PDF → 配对 → 跑核对 → 存结果。"""
-    approvals, contracts, errors = [], [], list(pre_errors)
+def _run_job(job_id: str, pdfs: list[tuple[str, bytes]], pre_errors: list[str], session: str) -> None:
+    """后台线程：只识别该批次里没见过的新文件 → 存入批次 → 对整批配对核对。"""
+    errors = list(pre_errors)
     try:
+        seen = _seen_hashes(session)
+        todo, skipped = [], 0
+        for name, data in pdfs:
+            h = hashlib.sha256(data).hexdigest()
+            if h in seen:
+                skipped += 1  # 这批之前传过、已识别，跳过不重复识别
+            else:
+                todo.append((name, data, h))
+        new_ok = 0
         with ThreadPoolExecutor(max_workers=_CONCURRENCY) as ex:
-            futs = [ex.submit(_extract_one, name, data) for name, data in pdfs]
-            for fut in as_completed(futs):
-                kind, val, name = fut.result()
-                if kind == "a":
-                    approvals.append(val)
-                elif kind == "c":
-                    contracts.append(val)
+            futmap = {ex.submit(_extract_one, name, data): (name, h) for name, data, h in todo}
+            for fut in as_completed(futmap):
+                kind, val, _name = fut.result()
+                _name2, h = futmap[fut]
+                if kind == "e":
+                    errors.append(f"{_name2}: 读取失败 {val}")
                 else:
-                    errors.append(f"{name}: 读取失败 {val}")
+                    _append_model(session, "approvals" if kind == "a" else "contracts", val)
+                    _mark_seen(session, h)
+                    new_ok += 1
                 with _JOBS_LOCK:
                     _JOBS[job_id]["done"] += 1
-        store = DedupStore("processed_approvals.json")
+        # 对【整批】（历史 + 本次新增）一起配对核对
+        approvals = _load_models(session, "approvals", Approval)
+        contracts = _load_models(session, "contracts", Contract)
+        store = DedupStore(str(_sess_dir(session) / "dedup.json"))
         items = run_batch(approvals, contracts, store, record=False)
-        html = _render_html(items, errors)
+        html = _render_html(items, errors, session, new_ok, skipped, len(approvals), len(contracts))
         with _JOBS_LOCK:
             _JOBS[job_id].update(status="done", html=html)
     except Exception as e:
@@ -150,7 +206,11 @@ def _run_job(job_id: str, pdfs: list[tuple[str, bytes]], pre_errors: list[str]) 
 
 
 @app.post("/audit", response_class=HTMLResponse)
-async def audit_files(files: list[UploadFile], _: None = Depends(require_login)) -> str:
+async def audit_files(
+    files: list[UploadFile], session: str = Form(""), _: None = Depends(require_login)
+) -> str:
+    # 批次名：留空就开一个新批次（随机短名）；填了同名 = 累计补传
+    session = _safe_session(session) if session.strip() else "b" + uuid.uuid4().hex[:6]
     # 先把上传内容读出来 + zip 解开（必须在请求里读完）
     pdfs: list[tuple[str, bytes]] = []
     pre_errors: list[str] = []
@@ -164,7 +224,7 @@ async def audit_files(files: list[UploadFile], _: None = Depends(require_login))
     job_id = uuid.uuid4().hex[:12]
     with _JOBS_LOCK:
         _JOBS[job_id] = {"status": "running", "total": len(pdfs), "done": 0, "html": None}
-    threading.Thread(target=_run_job, args=(job_id, pdfs, pre_errors), daemon=True).start()
+    threading.Thread(target=_run_job, args=(job_id, pdfs, pre_errors, session), daemon=True).start()
     # 立刻返回，跳到进度页（后台慢慢跑，页面自动刷新，绝不卡超时）
     return (
         f"<!doctype html><meta charset=utf-8>"
@@ -192,7 +252,7 @@ def job_page(job_id: str, _: None = Depends(require_login)) -> str:
     )
 
 
-def _render_html(items, errors) -> str:
+def _render_html(items, errors, session="", new_ok=0, skipped=0, total_appr=0, total_con=0) -> str:
     n = len(items)
     n_fail = sum(1 for it in items if it.overall is Status.FAIL)
     n_pass = sum(1 for it in items if it.overall is Status.PASS)
@@ -223,13 +283,35 @@ def _render_html(items, errors) -> str:
     if errors:
         err_html = "<h3>⚠️ 这些文件没读出来（请重传/确认）</h3><ul>" + "".join(
             f"<li>{e}</li>" for e in errors) + "</ul>"
+    sess_html = ""
+    if session:
+        sess_html = (
+            f"<div style='background:#eef4ff;padding:10px 14px;border-radius:8px;margin-bottom:14px'>"
+            f"批次：<b>{session}</b>　|　本次新识别 {new_ok} 个，跳过已识别 {skipped} 个　|　"
+            f"该批次累计：{total_appr} 审批 + {total_con} 合同<br>"
+            f"<a href='/?s={session}'>➕ 继续往「{session}」补传文件（会和现在这些合在一起核对）</a>　"
+            f"<a href='/clear/{session}' onclick=\"return confirm('清空批次 {session} 的所有文件？')\">🗑 清空此批次</a>"
+            f"</div>"
+        )
     return f"""<!doctype html><meta charset=utf-8>
 <title>核对结果</title>
 <style>body{{font-family:sans-serif;max-width:1100px;margin:24px auto}}
 table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #ddd;padding:8px;font-size:14px}}
 th{{background:#fafafa}}</style>
 <h2>核对结果：共 {n} 单　✅ {n_pass}　❌ {n_fail}</h2>
+{sess_html}
 {err_html}
 <table><tr><th>单号</th><th>项目/KOL</th><th>结论</th><th>原因 / 需人工项</th></tr>
 {''.join(rows)}</table>
-<p><a href="/">← 再传一批</a></p>"""
+<p><a href="/">← 开一个新批次</a></p>"""
+
+
+@app.get("/clear/{session}", response_class=HTMLResponse)
+def clear_session(session: str, _: None = Depends(require_login)) -> str:
+    d = _DATA_DIR / "sessions" / _safe_session(session)
+    if d.exists():
+        shutil.rmtree(d, ignore_errors=True)
+    return (
+        "<!doctype html><meta charset=utf-8>"
+        f"<meta http-equiv=refresh content='1;url=/'>已清空批次「{_safe_session(session)}」，返回首页…"
+    )
